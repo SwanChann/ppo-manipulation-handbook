@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>ManiSkill：PegInsertionSide-v1 · 操作 PPO 手册</title><link rel="icon" href="../../../../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../../../../assets/style.css"><script src="../../../../assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="../../../../index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="../../../../index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="../../../../index.html#stages"><b>02</b>阶段策略示意</a><a href="../../../../index.html#tasks"><b>03</b>源码任务索引</a><a href="../../../../index.html#rewards"><b>04</b>奖励设计机制</a><a href="../../../../index.html#configs"><b>05</b>训练配置对照</a><a href="../../../../index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="../../../../reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="../../../../index.html">操作 PPO 源码手册</a><a href="../../../../index.html#reading">目录 ↓</a></header><main id="main" class="main article-shell"><div class="article-header"><a href="../../../../index.html#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div><article class="prose"><h1>ManiSkill：PegInsertionSide-v1</h1><nav class="article-toc" aria-label="本页目录"><ul><li><a href="#section-1">任务、观测与验收</a></li><li><a href="#section-2">实际奖励</a></li><li><a href="#section-3">PPO配置与复现入口</a></li><li><a href="#section-4">证据与使用边界</a></li></ul></nav>
+<p>版本 <code>62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3</code>；检索日期2026-11-16。</p>
+<p>本卡是源码与有效配置静态取证（<code>verified-from-code</code>），不是本机复现实验；未下载任务资产、未安装 ManiSkill、未执行训练。配置属于上游该 SHA，不直接替换 X5/OrcaGym 的控制器、任务验收或 PPO 参数。</p>
+<p>默认物理 100 Hz、控制 20 Hz，即每个 policy step 含 5 个物理子步；奖励每控制步计算，没有额外乘 dt。单臂 Panda 使用 <code>pd_joint_delta_pos</code>：7 维相对当前关节位置的增量（归一化动作裁剪并映射至 ±0.1 rad）加 1 维绝对夹爪开度目标（−0.01 至 0.04 m）；双臂动作展平成 16 维。Fetch 还包含 body 关节增量与底盘前进/转向速度，不能当成同一 8 维接口。</p>
+<p><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/utils/structs/types.py#L78-L89">频率定义</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/agents/robots/panda/panda.py#L90-L98">Panda动作</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/agents/controllers/pd_joint_pos.py#L81-L98">增量基准</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/agents/robots/fetch/fetch.py#L219-L257">Fetch组合控制</a>。</p>
+<h2 id="section-1">任务、观测与验收</h2>
+<p>Robot：<code>panda_wristcam</code>；episode上限 100 控制步（5 s）。<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/envs/tasks/tabletop/peg_insertion_side.py#L50-L87">注册与默认构型</a>。</p>
+<p>peg head in hole frame x&gt;=-.015m, |y| and |z|&lt;=hole radius; no release/hold/retract criterion。<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/envs/tasks/tabletop/peg_insertion_side.py#L269-L298">实际 evaluate/obs 实现</a>。</p>
+<p>标准 state 策略输入机器人 qpos/qvel/controller state，加各任务 TCP、物体、目标及相对几何等 extras；本卡所查五个 dense 任务没有阶段 one-hot 或锁存阶段观测。<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/envs/sapien_env.py#L547-L559">状态组合</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/agents/base_agent.py#L339-L348">本体字段</a>。</p>
+<p>训练默认成功即终止并局部 reset；评估默认忽略 success termination，直到超时，分别记录 <code>success_once</code> 与 <code>success_at_end</code>。这两者都不等于本项目“按下 / 撤回 / 返回 / 连续停稳”的独立验收。<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/envs/sapien_env.py#L1050-L1078">BaseEnv termination</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/utils/registration.py#L127-L168">TimeLimit</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/vector/wrappers/gymnasium.py#L127-L168">评估wrapper</a>。</p>
+<h2 id="section-2">实际奖励</h2>
+<pre><code class="language-text">r=[1-tanh(4*d_tail)+G+3*G*(1-tanh(.5*(dh+dc)+4.5*max(dh,dc)))+5*G*I(dh&lt;.01 and dc&lt;.01)*(1-tanh(5*||head_in_hole||2))]/10; if S r=1
+</code></pre>
+<p><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/mani_skill/envs/tasks/tabletop/peg_insertion_side.py#L300-L360">奖励源码</a>。其中长度用 m，角速度用 rad/s；S代表上面源码定义的 success，I代表布尔指示量。</p>
+<p>d_tail 是 TCP 到 peg 位姿沿局部 x 负向60 mm位置的距离；G 使用 <code>is_grasping(..., max_angle=20)</code>。dh、dc 分别为 peg头与中心在 goal_pose 坐标系中的 yz 距离。二者均&lt;10 mm才激活插入项；该双点几何约束同时塑造姿态，不仅是点位距离。孔半径等于 peg 半径+3 mm。</p>
+<p>这里各阶段是累加门控，而不是 StackCube 的分支覆盖：接近项始终存在；抓住后加对齐项，抓住并对齐后加插入项。代码里 Stage1 注释并没有独立旋转 reward，不能把注释当作第四个实际奖励项。</p>
+<p>成功只看 peg头在孔坐标系的 x/y/z；x≥−15 mm、横向在孔半径内即可，不要求完全插到底、松手、持续保持或撤出。可以借鉴“先对齐再接触操作”的几何门控，不能把这一成功定义当作严格工业装配验收。</p>
+<h2 id="section-3">PPO配置与复现入口</h2>
+<p>命令在固定 SHA 的 <code>examples/baselines/ppo</code> 下运行；此处仅保存命令，未执行。<code>example_state</code> 是官方“tested examples”路径；<code>baseline_state/rgb</code> 是官方比较用 baselines.sh，二者预算/实现不同，不混用。</p>
+<h3>example_state</h3>
+<pre><code class="language-bash">python ppo.py --env_id=PegInsertionSide-v1 --num_envs=1024 --update_epochs=8 --num_minibatches=32 --total_timesteps=250000000 --num_steps=100 --num_eval_steps=100
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>有效值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>total_timesteps</td>
+<td>250000000</td>
+</tr>
+<tr>
+<td>actual_sample_budget_if_completed</td>
+<td>249958400</td>
+</tr>
+<tr>
+<td>num_envs</td>
+<td>1024</td>
+</tr>
+<tr>
+<td>num_steps</td>
+<td>100</td>
+</tr>
+<tr>
+<td>batch_size</td>
+<td>102400</td>
+</tr>
+<tr>
+<td>minibatch_size</td>
+<td>3200</td>
+</tr>
+<tr>
+<td>num_iterations</td>
+<td>2441</td>
+</tr>
+<tr>
+<td>num_eval_envs</td>
+<td>8</td>
+</tr>
+<tr>
+<td>num_eval_steps</td>
+<td>100</td>
+</tr>
+<tr>
+<td>update_epochs</td>
+<td>8</td>
+</tr>
+<tr>
+<td>learning_rate</td>
+<td>0.0003</td>
+</tr>
+<tr>
+<td>gamma</td>
+<td>0.8</td>
+</tr>
+<tr>
+<td>gae_lambda</td>
+<td>0.9</td>
+</tr>
+<tr>
+<td>clip_coef</td>
+<td>0.2</td>
+</tr>
+<tr>
+<td>ent_coef</td>
+<td>0.0</td>
+</tr>
+<tr>
+<td>vf_coef</td>
+<td>0.5</td>
+</tr>
+<tr>
+<td>target_kl</td>
+<td>0.1</td>
+</tr>
+<tr>
+<td>max_grad_norm</td>
+<td>0.5</td>
+</tr>
+<tr>
+<td>initial_logstd</td>
+<td>-0.5</td>
+</tr>
+<tr>
+<td>actor_layers</td>
+<td>[256, 256, 256]</td>
+</tr>
+<tr>
+<td>critic_layers</td>
+<td>[256, 256, 256]</td>
+</tr>
+<tr>
+<td>seed</td>
+<td>1</td>
+</tr>
+</tbody>
+</table></div>
+<p><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">ppo_defaults</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">ppo_setup</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/examples.sh#L1-L26">examples</a>。</p>
+<h3>baseline_state</h3>
+<pre><code class="language-bash">python ppo_fast.py --env_id=PegInsertionSide-v1 --num_envs=2048 --num_steps=16 --num_eval_envs=16 --update_epochs=8 --num_minibatches=32 --total_timesteps=75000000 --num_eval_steps=100 --gamma=0.97 --gae_lambda=0.95 --cudagraphs --seed=9351 # repeat 4796,1788 separately
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>有效值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>total_timesteps</td>
+<td>75000000</td>
+</tr>
+<tr>
+<td>actual_sample_budget_if_completed</td>
+<td>74973184</td>
+</tr>
+<tr>
+<td>num_envs</td>
+<td>2048</td>
+</tr>
+<tr>
+<td>num_steps</td>
+<td>16</td>
+</tr>
+<tr>
+<td>batch_size</td>
+<td>32768</td>
+</tr>
+<tr>
+<td>minibatch_size</td>
+<td>1024</td>
+</tr>
+<tr>
+<td>num_iterations</td>
+<td>2288</td>
+</tr>
+<tr>
+<td>num_eval_envs</td>
+<td>16</td>
+</tr>
+<tr>
+<td>num_eval_steps</td>
+<td>100</td>
+</tr>
+<tr>
+<td>update_epochs</td>
+<td>8</td>
+</tr>
+<tr>
+<td>learning_rate</td>
+<td>0.0003</td>
+</tr>
+<tr>
+<td>gamma</td>
+<td>0.97</td>
+</tr>
+<tr>
+<td>gae_lambda</td>
+<td>0.95</td>
+</tr>
+<tr>
+<td>clip_coef</td>
+<td>0.2</td>
+</tr>
+<tr>
+<td>ent_coef</td>
+<td>0.0</td>
+</tr>
+<tr>
+<td>vf_coef</td>
+<td>0.5</td>
+</tr>
+<tr>
+<td>target_kl</td>
+<td>0.1</td>
+</tr>
+<tr>
+<td>max_grad_norm</td>
+<td>0.5</td>
+</tr>
+<tr>
+<td>initial_logstd</td>
+<td>0</td>
+</tr>
+<tr>
+<td>actor_layers</td>
+<td>[256, 256, 256]</td>
+</tr>
+<tr>
+<td>critic_layers</td>
+<td>[256, 256, 256]</td>
+</tr>
+<tr>
+<td>seed</td>
+<td>9351</td>
+</tr>
+</tbody>
+</table></div>
+<p><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">fast_defaults</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L117-L125">baseline_peg</a>；<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L3-L24">baseline_pick</a>。</p>
+<p>所有列出配置：Adam学习率3e-4、无学习率退火、advantage normalization开启、无running observation normalization、reward_scale=1。state Actor/Critic各自3×256 Tanh；RGB分支为NatureCNN输出256+state投影256，共享特征后Actor/Critic各512 ReLU，没有LSTM。初始logstd：ppo_fast=0；普通ppo/ppo_rgb=−0.5。源码的总步数按完整rollout向下取整，故表同时列出实际采样预算。官方baseline seeds=[9351,4796,1788]；单个示例默认seed1。</p>
+<h2 id="section-4">证据与使用边界</h2>
+<p>本调查没有取得与上述精确命令绑定的逐seed原始成功率、GPU型号、显存或耗时，均标为未知；不把源码中的奖励上限或官方示例“tested”说明当作已独立复现成功。课程、额外随机化及控制器不能仅凭任务名互换。上游命令是不同学习问题的参考，不能证明 X5 当前 2M 必然足够。</p>
+</article><footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>

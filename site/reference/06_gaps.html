@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>覆盖、冲突与未验证事项 · 操作 PPO 手册</title><link rel="icon" href="../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../assets/style.css"><script src="../assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="../index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="../index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="../index.html#stages"><b>02</b>阶段策略示意</a><a href="../index.html#tasks"><b>03</b>源码任务索引</a><a href="../index.html#rewards"><b>04</b>奖励设计机制</a><a href="../index.html#configs"><b>05</b>训练配置对照</a><a href="../index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="../reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="../index.html">操作 PPO 源码手册</a><a href="../index.html#reading">目录 ↓</a></header><main id="main" class="main article-shell"><div class="article-header"><a href="../index.html#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div><article class="prose"><h1>覆盖、冲突与未验证事项</h1><nav class="article-toc" aria-label="本页目录"><ul><li><a href="#section-1">版本与源码冲突</a></li></ul></nav>
+<p>本轮筛查15个候选仓库，源码深查8个项目，建立19条任务记录、17个任务奖励记录、14个任务的专属配置记录。计数按合并后的JSONL唯一ID生成；<a href="../data/coverage.json">coverage.json</a>和<a href="source_manifest.json">source文件清单</a>保存本次证据版本。上游训练复现次数为0。</p>
+<p>“有专属配置”包含局部解析完成的记录；Playground的Brax依赖默认值仍有null，不能称所有参数均已核实。按配置记录状态统计，12个任务/变体的参数链标为verified-from-code，另2个Playground任务的依赖默认值未完全解析。完整成功率、训练时长和显存没有同条件原始日志支撑时均未知。本报告没有从演示视频、reward上限或配置预算编造性能。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>检索面</th>
+<th>实际覆盖</th>
+<th>证据入口</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>环境与任务注册</td>
+<td>ManiSkill tabletop/mobile/dexterity目录；Isaac Lab manager/direct；Playground当前与rss2025分支</td>
+<td><a href="parts/maniskill/06_gaps.html">ManiSkill范围</a>、<a href="parts/isaac/06_gaps.html">Isaac分卷</a></td>
+</tr>
+<tr>
+<td>奖励与时序</td>
+<td>抓放、堆叠、插入、抽屉、键盘、按钮、双手传递</td>
+<td>各任务卡及rewards.jsonl</td>
+</tr>
+<tr>
+<td>算法角色</td>
+<td>SB3、RSL-RL、skrl、CleanRL概览；任务集成中的RL-Games</td>
+<td><a href="parts/breadth/discovery_and_gaps.html">扩展检索</a></td>
+</tr>
+<tr>
+<td>专项扩展</td>
+<td>SO101 typing、Playground、RoboDuet；追加Bi-DexHands深查</td>
+<td><a href="parts/breadth/targeted_pass.html">定向补查</a></td>
+</tr>
+<tr>
+<td>负例</td>
+<td>ManiSkill TurnFaucet/AssemblingKits无已核验dense PPO；Lab Stack配置rewards=None</td>
+<td>对应负例任务卡</td>
+</tr>
+</tbody>
+</table></div>
+<p>检索结合“manipulation PPO”“contact-rich”“button/press/release”“insertion/assembly”“bimanual”“quadruped arm”等组合，跟进官方GitHub任务树、示例命令和原论文/项目链接。每路具体查询、来源与取舍保存在分卷缺口记录。没有采用星标阈值或编造热度排名。</p>
+<h2 id="section-1">版本与源码冲突</h2>
+<ul>
+<li>SO101教程覆盖rollout为32，纠正此前teacher20.48M估计；以实际入口链为准。</li>
+<li>SO101依赖fork与官方Lab所选release不同；manager计算与终止函数必须按实际依赖追踪。</li>
+<li>ManiSkill Drawer说明90%但代码75%；只报告执行阈值。</li>
+<li>ManiSkill部分任务dense函数只有注释；不据注释提供公式配置。</li>
+<li>Playground主干与rss2025任务是不同实现；Brax默认未完全固定。</li>
+<li>配置出现动作惩罚、timeout罚或完成奖励，不代表执行时一定计入；实际计算链差异保存在相应任务卡。</li>
+</ul>
+<p>停止点是完成本轮高相关任务的证据链和一个额外dexterous/mobile定向pass。该pass发现新价值，因此<strong>尚不能声称追加检索已无收益，也没有穷尽所有操作任务</strong>。未深入的任务包括更多阀门/旋钮/电缆、FMB、RoboCasa组合、灵巧手旋转与RoboDuet完整训练链；这些是明确后续覆盖项，不用相似任务参数填补。</p>
+<p>专项Skill的严格校验检查JSON引用、字段、SHA链接与报告章节，不执行上游仿真、不验证策略性能。最终校验输出见<a href="validation.txt">validation.txt</a>，人工复核包括配置入口覆盖、公式单位、奖励与success分离以及引用目标。诚实保留的warning不冒充已补齐。</p>
+</article><footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>

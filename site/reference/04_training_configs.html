@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>生效配置、预算与并行数 · 操作 PPO 手册</title><link rel="icon" href="../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../assets/style.css"><script src="../assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="../index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="../index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="../index.html#stages"><b>02</b>阶段策略示意</a><a href="../index.html#tasks"><b>03</b>源码任务索引</a><a href="../index.html#rewards"><b>04</b>奖励设计机制</a><a href="../index.html#configs"><b>05</b>训练配置对照</a><a href="../index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="../reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="../index.html">操作 PPO 源码手册</a><a href="../index.html#reading">目录 ↓</a></header><main id="main" class="main article-shell"><div class="article-header"><a href="../index.html#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div><article class="prose"><h1>生效配置、预算与并行数</h1><nav class="article-toc" aria-label="本页目录"><ul><li><a href="#section-1">按键盘教程预算更正</a></li><li><a href="#section-2">本机并行配置</a></li></ul></nav>
+<p>同一项目可能有类默认、任务override和教程override。下表每行是一套完整入口的配置记录，不能跨行挑参数再称为官方配置。超参数、Actor/Critic网络、归一化、命令和依赖链见对应任务卡与configs.jsonl。数字是配置预算，不是已测最短成功步数。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>配置ID</th>
+<th style="text-align:right">envs</th>
+<th>rollout长度</th>
+<th style="text-align:right">配置总环境步</th>
+<th style="text-align:right">lr</th>
+<th style="text-align:right">gamma</th>
+<th>配置证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ms_config_PickCube-v1_example_state</td>
+<td style="text-align:right">1024</td>
+<td>50</td>
+<td style="text-align:right">10000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_StackCube-v1_example_state</td>
+<td style="text-align:right">1024</td>
+<td>50</td>
+<td style="text-align:right">25000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_PegInsertionSide-v1_example_state</td>
+<td style="text-align:right">1024</td>
+<td>100</td>
+<td style="text-align:right">250000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_TwoRobotStackCube-v1_example_state</td>
+<td style="text-align:right">1024</td>
+<td>100</td>
+<td style="text-align:right">40000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_OpenCabinetDrawer-v1_example_state</td>
+<td style="text-align:right">1024</td>
+<td>100</td>
+<td style="text-align:right">10000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_PickCube-v1_baseline_state</td>
+<td style="text-align:right">4096</td>
+<td>4</td>
+<td style="text-align:right">50000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L3-L24">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_StackCube-v1_baseline_state</td>
+<td style="text-align:right">4096</td>
+<td>16</td>
+<td style="text-align:right">50000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L57-L65">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_PegInsertionSide-v1_baseline_state</td>
+<td style="text-align:right">2048</td>
+<td>16</td>
+<td style="text-align:right">75000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.97</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L117-L125">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_OpenCabinetDrawer-v1_baseline_state</td>
+<td style="text-align:right">1024</td>
+<td>16</td>
+<td style="text-align:right">50000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L157-L165">源码</a></td>
+</tr>
+<tr>
+<td>ms_config_PickCube-v1_baseline_rgb</td>
+<td style="text-align:right">1024</td>
+<td>16</td>
+<td style="text-align:right">50000000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.8</td>
+<td><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_rgb.py#L54-L111">源码</a>、<a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_rgb.py#L176-L251">源码</a></td>
+</tr>
+<tr>
+<td>isaac_config_lift</td>
+<td style="text-align:right">4096</td>
+<td>24</td>
+<td style="text-align:right">147456000</td>
+<td style="text-align:right">0.0001</td>
+<td style="text-align:right">0.98</td>
+<td><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/manager_based/manipulation/lift/config/franka/__init__.py#L19-L30">源码</a>、<a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/manager_based/manipulation/lift/lift_env_cfg.py#L95-L222">源码</a></td>
+</tr>
+<tr>
+<td>isaac_config_cabinet</td>
+<td style="text-align:right">4096</td>
+<td>16</td>
+<td style="text-align:right">98304000</td>
+<td style="text-align:right">0.0005</td>
+<td style="text-align:right">0.99</td>
+<td><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/franka_cabinet/__init__.py#L17-L27">源码</a>、<a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/franka_cabinet/franka_cabinet_env.py#L26-L158">源码</a></td>
+</tr>
+<tr>
+<td>isaac_config_factory</td>
+<td style="text-align:right">128</td>
+<td>128</td>
+<td style="text-align:right">3276800</td>
+<td style="text-align:right">0.0001</td>
+<td style="text-align:right">0.995</td>
+<td><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/factory/__init__.py#L17-L25">源码</a>、<a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/factory/factory_env_cfg.py#L17-L119">源码</a></td>
+</tr>
+<tr>
+<td>isaac_config_legacy_stack</td>
+<td style="text-align:right">8192</td>
+<td>32</td>
+<td style="text-align:right">2621440000</td>
+<td style="text-align:right">0.0005</td>
+<td style="text-align:right">0.99</td>
+<td><a href="https://github.com/isaac-sim/IsaacGymEnvs/blob/aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3/isaacgymenvs/cfg/task/FrankaCubeStack.yaml#L1-L61">源码</a>、<a href="https://github.com/isaac-sim/IsaacGymEnvs/blob/aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3/isaacgymenvs/cfg/train/FrankaCubeStackPPO.yaml#L1-L71">源码</a></td>
+</tr>
+<tr>
+<td>isaac_config_typing_p0</td>
+<td style="text-align:right">4096</td>
+<td>64</td>
+<td style="text-align:right">5242880000</td>
+<td style="text-align:right">0.0001</td>
+<td style="text-align:right">0.995</td>
+<td><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/__init__.py#L17-L46">源码</a>、<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/physical_calibrated_20260718_env_cfg.py#L165-L188">源码</a></td>
+</tr>
+<tr>
+<td>isaac_config_typing_tutorial_teacher</td>
+<td style="text-align:right">64</td>
+<td>32</td>
+<td style="text-align:right">10240000</td>
+<td style="text-align:right">0.0001</td>
+<td style="text-align:right">0.995</td>
+<td><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/configs/tutorial/default.json#L1-L18">源码</a>、<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/tutorial/cli.py#L250-L274">源码</a></td>
+</tr>
+<tr>
+<td>isaac_config_typing_tutorial_vision</td>
+<td style="text-align:right">64</td>
+<td>32</td>
+<td style="text-align:right">10240000</td>
+<td style="text-align:right">0.0001</td>
+<td style="text-align:right">0.995</td>
+<td><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/configs/tutorial/default.json#L1-L18">源码</a>、<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/tutorial/cli.py#L250-L274">源码</a></td>
+</tr>
+<tr>
+<td>br_pick_state</td>
+<td style="text-align:right">1024</td>
+<td>10（Brax unroll）</td>
+<td style="text-align:right">5000000</td>
+<td style="text-align:right">0.0005</td>
+<td style="text-align:right">0.97</td>
+<td><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/config/manipulation_params.py#L24-L110">源码</a>、<a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/learning/train_jax_ppo.py#L186-L249">源码</a></td>
+</tr>
+<tr>
+<td>br_cabinet</td>
+<td style="text-align:right">2048</td>
+<td>10（Brax unroll）</td>
+<td style="text-align:right">40000000</td>
+<td style="text-align:right">0.001</td>
+<td style="text-align:right">0.97</td>
+<td><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/config/manipulation_params.py#L24-L110">源码</a>、<a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/learning/train_jax_ppo.py#L186-L249">源码</a></td>
+</tr>
+<tr>
+<td>br_pick_vision</td>
+<td style="text-align:right">1024</td>
+<td>10（Brax unroll）</td>
+<td style="text-align:right">10000000</td>
+<td style="text-align:right">0.001</td>
+<td style="text-align:right">0.97</td>
+<td><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/config/manipulation_params.py#L177-L226">源码</a>、<a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/learning/train_jax_ppo.py#L186-L249">源码</a></td>
+</tr>
+<tr>
+<td>br_bidex_ppo</td>
+<td style="text-align:right">128</td>
+<td>8</td>
+<td style="text-align:right">6656000</td>
+<td style="text-align:right">0.0003</td>
+<td style="text-align:right">0.96</td>
+<td><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/cfg/ppo/config.yaml#L1-L35">源码</a>、<a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/cfg/ShadowHandOver.yaml#L1-L47">源码</a></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="section-1">按键盘教程预算更正</h2>
+<p>公开tutorial teacher调用vision.runner_config；该函数将num_steps_per_env覆盖为32。teacher只更换Actor/Critic输入与Actor分布，没有改回64。因此tutorial teacher为64×32×5000=10,240,000步；视觉PPO另有同量步数，模仿预热为64×32×300=614,400交互步。预热不是PPO，注册P0默认配置也不是这个教程入口。<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/tutorial/runtime.py#L25-L30">调用链</a>、<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/vision/agent.py#L13-L22">覆盖</a>、<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/configs/tutorial/default.json#L1-L18">教程预算</a>。</p>
+<p>此前20,480,000的推导混用了注册类的64步rollout与教程的64环境/5000轮；该结论在这里明确更正，旧原始材料保留。源码默认并不证明作者所有实际运行都用同一预算。teacher监督、初态、动作空间和终点条件都与本地不同，不能直接比较样本效率。</p>
+<h2 id="section-2">本机并行配置</h2>
+<p>本地续训配置（本地实验附件，未随手册公开）为8环境×128步=1024样本/rollout，minibatch64，4 epochs；target_kl可提前停止当轮优化。累计目标1999872，续接100352，新增1899520。理论上每完整epoch有16个minibatch，但循环序列padding和KL提前停止需按实际记录解读，不能把_n_updates当作optimizer.step数量。</p>
+<p>若保持总环境步N，采样轮数约N/(envs×rollout_length)。加环境不等于保持同一算法更新安排；rollout_length变短还会影响时间覆盖与循环记忆训练。以200万比较，8×128约1953轮，64×128约244轮，64×32约977轮。上述是算术关系，不是成功率预测。</p>
+<p>本地8环境已验证；16/32/64吞吐未测试。CPU仿真、多进程IPC、相机渲染、GPU更新共同决定速度，不能用Isaac GPU环境数替代本机测量。后续若测并行度，先固定env-step预算、观测/渲染和优化工作量，分别记录采样、更新、评估耗时及峰值显存，再决定是否调整。</p>
+<p>Brax的batch_size与num_minibatches存在其自身采样约定，本调查没有把它的num_envs×unroll直接冒充SB3的一次更新batch。Playground未解析的依赖默认参数保留null；详情见<a href="parts/breadth/task_cards/playground__PandaPickCubeCartesian.html">Pick任务卡</a>。</p>
+</article><footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>

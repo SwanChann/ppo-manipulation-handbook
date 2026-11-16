@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>有效训练配置与预算口径 · 操作 PPO 手册</title><link rel="icon" href="../../../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../../../assets/style.css"><script src="../../../assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="../../../index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="../../../index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="../../../index.html#stages"><b>02</b>阶段策略示意</a><a href="../../../index.html#tasks"><b>03</b>源码任务索引</a><a href="../../../index.html#rewards"><b>04</b>奖励设计机制</a><a href="../../../index.html#configs"><b>05</b>训练配置对照</a><a href="../../../index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="../../../reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="../../../index.html">操作 PPO 源码手册</a><a href="../../../index.html#reading">目录 ↓</a></header><main id="main" class="main article-shell"><div class="article-header"><a href="../../../index.html#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div><article class="prose"><h1>有效训练配置与预算口径</h1>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>选定入口/变体</th>
+<th style="text-align:right">env×rollout×迭代</th>
+<th style="text-align:right">环境步上限</th>
+<th>优化epochs/minibatch</th>
+<th>lr/gamma/entropy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lab Lift/RSL</td>
+<td style="text-align:right">4096×24×1500</td>
+<td style="text-align:right">147,456,000</td>
+<td>5/24576</td>
+<td>1e−4/.98/.006</td>
+</tr>
+<tr>
+<td>Lab Cabinet/RSL</td>
+<td style="text-align:right">4096×16×1500</td>
+<td style="text-align:right">98,304,000</td>
+<td>8/8192</td>
+<td>5e−4/.99/0</td>
+</tr>
+<tr>
+<td>Lab Factory/RLGames</td>
+<td style="text-align:right">128×128×200</td>
+<td style="text-align:right">3,276,800</td>
+<td>4/512</td>
+<td>1e−4/.995/0</td>
+</tr>
+<tr>
+<td>GymEnvs Stack/RLGames</td>
+<td style="text-align:right">8192×32×10000</td>
+<td style="text-align:right">2,621,440,000</td>
+<td>5/16384</td>
+<td>5e−4/.99/0</td>
+</tr>
+<tr>
+<td>SO101注册P0默认</td>
+<td style="text-align:right">4096×64×20000</td>
+<td style="text-align:right">5,242,880,000</td>
+<td>5/65536</td>
+<td>1e−4/.995/.005</td>
+</tr>
+<tr>
+<td>SO101 tutorial teacher</td>
+<td style="text-align:right">64×32×5000</td>
+<td style="text-align:right">10,240,000</td>
+<td>4/512</td>
+<td>1e−4 fixed/.995/.005</td>
+</tr>
+<tr>
+<td>SO101 tutorial vision PPO</td>
+<td style="text-align:right">64×32×5000</td>
+<td style="text-align:right">10,240,000</td>
+<td>4/512</td>
+<td>1e−4 fixed/.995/.005</td>
+</tr>
+</tbody>
+</table></div>
+<p>这些数字是<strong>配置上限，不是实测收敛时间/最低样本需求</strong>。SO101另有614400环境交互的teacher imitation warmup，不能算为PPO更新步。旧20.48M teacher估算忽略了runner_config对rollout32的覆盖，本分册已纠正。<a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/manager_based/manipulation/lift/config/franka/agents/rsl_rl_ppo_cfg.py#L12-L38">源码</a> <a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/franka_cabinet/agents/rsl_rl_ppo_cfg.py#L12-L38">源码</a> <a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/factory/agents/rl_games_ppo_cfg.yaml#L7-L123">源码</a> <a href="https://github.com/isaac-sim/IsaacGymEnvs/blob/aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3/isaacgymenvs/cfg/train/FrankaCubeStackPPO.yaml#L1-L71">源码</a> <a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/agents/rsl_rl_ppo_cfg.py#L22-L113">源码</a> <a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/vision/agent.py#L13-L22">源码</a> <a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/tutorial/runtime.py#L25-L30">源码</a> <a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/vision/train_simple.py#L67-L113">源码</a></p>
+<p>每项的完整gamma/GAE/clip/KL、归一化、网络和实际命令保存在data/configs.jsonl并附文件行号。Factory2层1024LSTM、特权critic不能与普通MLP/PPO速度横比。这里没有推算上游训练GPU小时或显存，因为缺少同硬件实测证据。</p>
+</article><footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>

@@ -1,0 +1,68 @@
+<section class="hero" id="start">
+  <div class="eyebrow">SOURCE-GROUNDED FIELD GUIDE · 2026-11-16</div>
+  <h1>让机械臂学会<br><em>完整地完成任务。</em></h1>
+  <p class="lead">从按键、堆叠和插入的源码出发，理解多阶段 PPO 的目标切换、奖励设计与训练配置。</p>
+  <div class="hero-actions"><a class="button" href="#takeaways">开始阅读 <span>↓</span></a><a class="button secondary" href="#tasks">直接找任务</a></div>
+  <div class="stats"><div><strong>15</strong><span>项目筛查</span></div><div><strong>19</strong><span>任务与变体</span></div><div><strong>21</strong><span>配置记录</span></div><div><strong>0</strong><span>上游训练复现</span></div></div>
+  <p class="caption">范围与计数来自<a href="data/coverage.json">调查账本</a>。源码核验支持实现结论；训练效果尚未在本地复现。</p>
+</section>
+<section id="takeaways">
+  <div class="section-heading"><span class="section-number">01</span><div><p class="eyebrow">先建立判断</p><h2>最值得带走的三个设计</h2></div></div>
+  <div class="cards three">
+    <article class="card"><span class="tag">事件记忆</span><h3>按过以后，目标就变了</h3><p>按钮释放后，几何位置可能回到按压前，但任务进度已经不同。SO101 用事件状态保存这段历史，Actor 与 Critic 都能读到阶段。</p><a href="reference/parts/isaac/task_cards/so101_typing.html">阅读 SO101 按键实现 →</a></article>
+    <article class="card"><span class="tag">奖励覆盖</span><h3>后段可以覆盖前段奖励</h3><p>ManiSkill StackCube 抓住后改为放置奖励，叠好后改为松手和静止奖励。代码按条件覆盖 reward，无需锁存式 FSM。</p><a href="reference/parts/maniskill/task_cards/StackCube-v1.html">阅读 StackCube 分段公式 →</a></article>
+    <article class="card"><span class="tag">物理验收</span><h3>高奖励还需要完整验收</h3><p>插入、开启和抬升的成功条件各不相同。上游任务往往没有“返回初态并停稳”要求，复用奖励时要保留自己任务的终点定义。</p><a href="reference/03_reward_patterns.html">比较奖励和成功条件 →</a></article>
+  </div>
+  <div class="note"><strong>阅读顺序</strong><p>先看下面的阶段示意，再筛选与你相近的任务；确定控制接口与成功条件后，才比较公式和超参数。完整公式、入口命令和固定版本源码保留在每张任务卡里。</p></div>
+</section>
+<section id="stages">
+  <div class="section-heading"><span class="section-number">02</span><div><p class="eyebrow">从按钮理解分阶段策略</p><h2>一个 Actor，按事件切换目标</h2></div></div>
+  <p>这里用 X5 按钮任务的三个策略阶段解释设计。阶段来自物理事件；one-hot 是输入给策略的阶段编码。阶段编号本身不判定任务成功。</p>
+  <div class="segmented" role="tablist" aria-label="策略阶段">
+    <button role="tab" aria-selected="true" aria-controls="stage-panel" id="stage-tab-0" data-stage="0">1. 有效按压</button><button role="tab" aria-selected="false" aria-controls="stage-panel" id="stage-tab-1" data-stage="1" tabindex="-1">2. 释放撤离</button><button role="tab" aria-selected="false" aria-controls="stage-panel" id="stage-tab-2" data-stage="2" tabindex="-1">3. 返回停稳</button>
+  </div>
+  <div class="stage-panel" id="stage-panel" role="tabpanel" aria-labelledby="stage-tab-0" tabindex="0">
+    <div class="stage-visual"><div class="onehot" id="onehot" aria-label="当前阶段 one-hot"><b class="active">1</b><b>0</b><b>0</b></div><span>Actor + Critic 的阶段输入</span><div class="flow"><span>图像 / 本体</span><span>＋ 阶段 / 上下文</span><span>→ 策略 → 动作</span></div></div>
+    <div><span class="tag" id="stage-label">PRESS_VALID</span><h3 id="stage-title">接近目标，形成连续有效按压</h3><p id="stage-body">只激活当前按压目标的进度项。按钮真实行程达到阈值并连续保持，才完成本阶段。</p><div class="mini-label">推进到下一阶段的事件</div><p id="stage-event">真实深度 ≥ 5 mm，连续保持 100 ms。</p><div class="mini-label">奖励语义</div><p id="stage-reward">本阶段的有符号进度 + 一次性有效按压事件奖励。</p></div>
+  </div>
+  <p class="caption">以上是本地设计解释，依据调查中的<a href="reference/03_reward_patterns.html">奖励分段</a>与<a href="reference/05_recommendations.html">复用边界</a>。验收按独立物理事件检查；碰撞、重复按压和超行程仍会失败。</p>
+  <details><summary>术语速查：Actor、Critic、FSM、one-hot 与 rollout</summary><dl class="glossary"><dt>Actor</dt><dd>读取观测并输出机器人动作的策略网络。</dd><dt>Critic</dt><dd>估计状态价值，帮助 PPO 判断动作带来的回报是否好于预期；可以有明确声明的额外输入。</dd><dt>FSM</dt><dd>有限状态机。在这里根据真实事件更新任务阶段，并保存“已完成有效按压”等历史。</dd><dt>one-hot</dt><dd>只有当前阶段为 1、其余为 0 的向量。三阶段分别是 [1,0,0]、[0,1,0]、[0,0,1]。</dd><dt>rollout</dt><dd>优化策略前采集的一段轨迹。SB3 中每轮样本数通常为环境数 × 每环境采样步数。</dd><dt>Return</dt><dd>用于学习的累计回报；其数值依赖奖励定义，不能直接替代完整成功率。</dd></dl></details>
+</section>
+<section id="tasks">
+  <div class="section-heading"><span class="section-number">03</span><div><p class="eyebrow">源码任务索引</p><h2>先选任务，再读实现</h2></div></div>
+  <p>用任务类型筛选；每张卡给出值得借鉴的机制和上游验收边界。完整卡保留奖励公式、观测、动作与配置。<span class="muted">“源码已核验”不表示策略已复现成功。</span></p>
+  <div class="filters"><label class="search-label"><span>搜索任务或项目</span><input type="search" id="task-search" placeholder="例如：按键、Stack、插入、ManiSkill" autocomplete="off"></label><label><span>任务类型</span><select id="task-family"><option value="all">全部任务</option><option value="press-switch">按钮 / 按键</option><option value="grasp-place">抓取 / 堆叠</option><option value="insertion-assembly">插入 / 装配</option><option value="articulated">抽屉 / 关节物体</option><option value="bimanual">双臂 / 双手</option><option value="mobile-manipulation">移动操作</option></select></label></div>
+  <p id="task-count" class="caption" aria-live="polite"></p><div class="cards task-grid" id="task-grid">{{TASK_CARDS}}</div><p id="task-empty" hidden>没有匹配的任务。试试更短的关键词或选择全部类型。</p>
+</section>
+<section id="rewards">
+  <div class="section-heading"><span class="section-number">04</span><div><p class="eyebrow">奖励设计的四种机制</p><h2>先区分“激活条件”和“计算方式”</h2></div></div>
+  <div class="reward-grid">
+    <article class="card"><span class="tag">ManiSkill · 条件覆盖</span><h3>每步选择当前目标</h3><pre>抓住前：接近物块
+抓住后：放置目标
+叠好后：松手 + 物块静止</pre><p>当前物理状态决定 reward 分支，后段覆盖前段。状态可以回退，通常不记录“曾经做过”。</p><a href="reference/parts/maniskill/task_cards/StackCube-v1.html">精确系数与源码 →</a></article>
+    <article class="card"><span class="tag">SO101 · 事件门控</span><h3>只有当前阶段领取进度</h3><pre>r_progress = clip(
+  (d_previous − d_current) / scale,
+  −1, 1)
+切换目标 / 阶段的当步：进度为 0</pre><p>接近和撤离采用各自的距离定义。一次性事件奖励单独记账，避免重复触发。</p><a href="reference/parts/isaac/task_cards/so101_typing.html">三个事件状态与奖励 →</a></article>
+    <article class="card"><span class="tag">Playground · 历史最高分</span><h3>只奖励新取得的进展</h3><pre>r = max(S_current − M_previous, 0)
+M = max(S_current, M_previous)</pre><p>同一回合中，再次到达旧高度不会重复领分。退步本身不扣分，与有符号进度不同。</p><a href="reference/parts/breadth/task_cards/playground__PandaPickCubeCartesian.html">初态和奖励的完整条件 →</a></article>
+    <article class="card"><span class="tag">PBRS · 势函数塑形</span><h3>折扣和终止边界也在公式里</h3><pre>F(s, s′) = γΦ(s′) − Φ(s)
+若 Φ = −D：F = D(s) − γD(s′)</pre><p>普通距离差没有右侧的 γ。策略不变性有条件，不能直接套到任意阶段奖励上。</p><a href="reference/03_reward_patterns.html">数学区别与原论文 →</a></article>
+  </div>
+  <div class="note amber"><strong>复制权重前，先检查时间单位</strong><p>Isaac Lab manager 路径还会乘控制周期 dt，Direct 路径则按任务实现。相同 weight 并不等于相同每步奖励。任务成功、终止和重复事件也要一起检查。</p></div>
+</section>
+<section id="configs">
+  <div class="section-heading"><span class="section-number">05</span><div><p class="eyebrow">生效训练配置</p><h2>预算对应入口，不能跨版本拼参数</h2></div></div>
+  <p>下表为固定源码版本中的配置预算，并非最少收敛步数。未知字段保留“未知”；展开一行可查看全部超参数、命令、输入权限与源码证据。</p>
+  <label class="search-label config-search"><span>筛选配置</span><input type="search" id="config-search" placeholder="例如：SO101、vision、Stack、Factory"></label>
+  <div class="table-wrap"><table class="config-table"><thead><tr><th>任务 / 入口</th><th>环境数</th><th>采样长度</th><th>配置总步数</th><th>学习率</th><th>γ</th><th>详情</th></tr></thead><tbody>{{CONFIG_ROWS}}</tbody></table></div>
+  <p id="config-count" class="caption" aria-live="polite"></p>
+  <div class="note"><strong>SO101 教程：每个 PPO 训练段 10.24M 步</strong><p>公开教程覆盖为 64 环境 × 32 步 × 5000 轮。Teacher 与视觉 PPO 各有一个这样的训练段；模仿预热 614,400 交互步另计。此前 teacher 20.48M 的估算混用了入口默认值，已在<a href="reference/04_training_configs.html">配置链核对</a>中明确更正。</p></div>
+  <div class="calculator"><div><h3>并行数与采样轮数</h3><p>固定总环境步数时，增加并行数会减少采样轮数。吞吐能否提升需要测量。以下按 SB3 的完整 rollout 向下对齐，仅做算术估算。</p><p class="caption">Brax、RL-Games 等实现的 batch 约定需按各自代码解释。</p></div><div><div class="calc-inputs"><label>总环境步数<input id="calc-total" type="number" min="1" max="100000000000" value="2000000"></label><label>并行环境<input id="calc-envs" type="number" min="1" max="65536" value="8"></label><label>每环境采样步<input id="calc-steps" type="number" min="1" max="65536" value="128"></label></div><output id="calc-output" aria-live="polite"></output></div></div>
+</section>
+<section id="reading">
+  <div class="section-heading"><span class="section-number">06</span><div><p class="eyebrow">完整技术附录</p><h2>需要细节时，从这里深入</h2></div></div>
+  <div class="chapter-list">{{CHAPTER_LINKS}}</div>
+  <details><summary>全部分卷与源码任务卡</summary><div class="reference-index">{{REFERENCE_LINKS}}</div></details>
+  <div class="note"><strong>证据范围</strong><p>本手册基于 2026-11-16 的固定版本源码调查。部分任务只有环境，没有已核验的任务专属 PPO 配置；未运行上游训练。性能、显存和收敛时长缺乏可比日志时仍为未知。<a href="reference/06_gaps.html">查看覆盖与缺口</a>，或下载<a href="data/evidence.jsonl">源码证据账本</a>。</p></div>
+</section>

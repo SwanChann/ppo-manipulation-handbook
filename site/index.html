@@ -1,0 +1,1105 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>机械臂多阶段强化学习 · 操作 PPO 手册</title><link rel="icon" href="assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="index.html#stages"><b>02</b>阶段策略示意</a><a href="index.html#tasks"><b>03</b>源码任务索引</a><a href="index.html#rewards"><b>04</b>奖励设计机制</a><a href="index.html#configs"><b>05</b>训练配置对照</a><a href="index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="index.html">操作 PPO 源码手册</a><a href="index.html#reading">目录 ↓</a></header><main id="main" class="main "><section class="hero" id="start">
+  <div class="eyebrow">SOURCE-GROUNDED FIELD GUIDE · 2026-11-16</div>
+  <h1>让机械臂学会<br><em>完整地完成任务。</em></h1>
+  <p class="lead">从按键、堆叠和插入的源码出发，理解多阶段 PPO 的目标切换、奖励设计与训练配置。</p>
+  <div class="hero-actions"><a class="button" href="#takeaways">开始阅读 <span>↓</span></a><a class="button secondary" href="#tasks">直接找任务</a></div>
+  <div class="stats"><div><strong>15</strong><span>项目筛查</span></div><div><strong>19</strong><span>任务与变体</span></div><div><strong>21</strong><span>配置记录</span></div><div><strong>0</strong><span>上游训练复现</span></div></div>
+  <p class="caption">范围与计数来自<a href="data/coverage.json">调查账本</a>。源码核验支持实现结论；训练效果尚未在本地复现。</p>
+</section>
+<section id="takeaways">
+  <div class="section-heading"><span class="section-number">01</span><div><p class="eyebrow">先建立判断</p><h2>最值得带走的三个设计</h2></div></div>
+  <div class="cards three">
+    <article class="card"><span class="tag">事件记忆</span><h3>按过以后，目标就变了</h3><p>按钮释放后，几何位置可能回到按压前，但任务进度已经不同。SO101 用事件状态保存这段历史，Actor 与 Critic 都能读到阶段。</p><a href="reference/parts/isaac/task_cards/so101_typing.html">阅读 SO101 按键实现 →</a></article>
+    <article class="card"><span class="tag">奖励覆盖</span><h3>后段可以覆盖前段奖励</h3><p>ManiSkill StackCube 抓住后改为放置奖励，叠好后改为松手和静止奖励。代码按条件覆盖 reward，无需锁存式 FSM。</p><a href="reference/parts/maniskill/task_cards/StackCube-v1.html">阅读 StackCube 分段公式 →</a></article>
+    <article class="card"><span class="tag">物理验收</span><h3>高奖励还需要完整验收</h3><p>插入、开启和抬升的成功条件各不相同。上游任务往往没有“返回初态并停稳”要求，复用奖励时要保留自己任务的终点定义。</p><a href="reference/03_reward_patterns.html">比较奖励和成功条件 →</a></article>
+  </div>
+  <div class="note"><strong>阅读顺序</strong><p>先看下面的阶段示意，再筛选与你相近的任务；确定控制接口与成功条件后，才比较公式和超参数。完整公式、入口命令和固定版本源码保留在每张任务卡里。</p></div>
+</section>
+<section id="stages">
+  <div class="section-heading"><span class="section-number">02</span><div><p class="eyebrow">从按钮理解分阶段策略</p><h2>一个 Actor，按事件切换目标</h2></div></div>
+  <p>这里用 X5 按钮任务的三个策略阶段解释设计。阶段来自物理事件；one-hot 是输入给策略的阶段编码。阶段编号本身不判定任务成功。</p>
+  <div class="segmented" role="tablist" aria-label="策略阶段">
+    <button role="tab" aria-selected="true" aria-controls="stage-panel" id="stage-tab-0" data-stage="0">1. 有效按压</button><button role="tab" aria-selected="false" aria-controls="stage-panel" id="stage-tab-1" data-stage="1" tabindex="-1">2. 释放撤离</button><button role="tab" aria-selected="false" aria-controls="stage-panel" id="stage-tab-2" data-stage="2" tabindex="-1">3. 返回停稳</button>
+  </div>
+  <div class="stage-panel" id="stage-panel" role="tabpanel" aria-labelledby="stage-tab-0" tabindex="0">
+    <div class="stage-visual"><div class="onehot" id="onehot" aria-label="当前阶段 one-hot"><b class="active">1</b><b>0</b><b>0</b></div><span>Actor + Critic 的阶段输入</span><div class="flow"><span>图像 / 本体</span><span>＋ 阶段 / 上下文</span><span>→ 策略 → 动作</span></div></div>
+    <div><span class="tag" id="stage-label">PRESS_VALID</span><h3 id="stage-title">接近目标，形成连续有效按压</h3><p id="stage-body">只激活当前按压目标的进度项。按钮真实行程达到阈值并连续保持，才完成本阶段。</p><div class="mini-label">推进到下一阶段的事件</div><p id="stage-event">真实深度 ≥ 5 mm，连续保持 100 ms。</p><div class="mini-label">奖励语义</div><p id="stage-reward">本阶段的有符号进度 + 一次性有效按压事件奖励。</p></div>
+  </div>
+  <p class="caption">以上是本地设计解释，依据调查中的<a href="reference/03_reward_patterns.html">奖励分段</a>与<a href="reference/05_recommendations.html">复用边界</a>。验收按独立物理事件检查；碰撞、重复按压和超行程仍会失败。</p>
+  <details><summary>术语速查：Actor、Critic、FSM、one-hot 与 rollout</summary><dl class="glossary"><dt>Actor</dt><dd>读取观测并输出机器人动作的策略网络。</dd><dt>Critic</dt><dd>估计状态价值，帮助 PPO 判断动作带来的回报是否好于预期；可以有明确声明的额外输入。</dd><dt>FSM</dt><dd>有限状态机。在这里根据真实事件更新任务阶段，并保存“已完成有效按压”等历史。</dd><dt>one-hot</dt><dd>只有当前阶段为 1、其余为 0 的向量。三阶段分别是 [1,0,0]、[0,1,0]、[0,0,1]。</dd><dt>rollout</dt><dd>优化策略前采集的一段轨迹。SB3 中每轮样本数通常为环境数 × 每环境采样步数。</dd><dt>Return</dt><dd>用于学习的累计回报；其数值依赖奖励定义，不能直接替代完整成功率。</dd></dl></details>
+</section>
+<section id="tasks">
+  <div class="section-heading"><span class="section-number">03</span><div><p class="eyebrow">源码任务索引</p><h2>先选任务，再读实现</h2></div></div>
+  <p>用任务类型筛选；每张卡给出值得借鉴的机制和上游验收边界。完整卡保留奖励公式、观测、动作与配置。<span class="muted">“源码已核验”不表示策略已复现成功。</span></p>
+  <div class="filters"><label class="search-label"><span>搜索任务或项目</span><input type="search" id="task-search" placeholder="例如：按键、Stack、插入、ManiSkill" autocomplete="off"></label><label><span>任务类型</span><select id="task-family"><option value="all">全部任务</option><option value="press-switch">按钮 / 按键</option><option value="grasp-place">抓取 / 堆叠</option><option value="insertion-assembly">插入 / 装配</option><option value="articulated">抽屉 / 关节物体</option><option value="bimanual">双臂 / 双手</option><option value="mobile-manipulation">移动操作</option></select></label></div>
+  <p id="task-count" class="caption" aria-live="polite"></p><div class="cards task-grid" id="task-grid"><article class="card task-card" data-family="press-switch" data-search="so101 按键 · 注册 p0 isaac-keyboard-so101-mx-physical-calibrated-20260718-fixedcartesian-anchorbench-p0 nvidia so101 typing task 按钮 / 按键 事件 fsm、actor/critic one-hot、当前阶段进度。 注册 p0 与公开视觉教程的配置和验收需分开。"><div class="task-project">NVIDIA SO101 typing task · 按钮 / 按键</div><span class="tag">源码已核验</span><h3>SO101 按键 · 注册 P0</h3><p>事件 FSM、Actor/Critic one-hot、当前阶段进度。</p><p class="boundary"><strong>验收边界：</strong>注册 P0 与公开视觉教程的配置和验收需分开。</p><a href="reference/parts/isaac/task_cards/so101_typing.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="press-switch" data-search="so101 按键 · 公开视觉教程 visionisaaclabphraseenvcfg / public tutorial random13 characters nvidia so101 typing task 按钮 / 按键 事件 fsm、actor/critic one-hot、当前阶段进度。 注册 p0 与公开视觉教程的配置和验收需分开。"><div class="task-project">NVIDIA SO101 typing task · 按钮 / 按键</div><span class="tag">源码已核验</span><h3>SO101 按键 · 公开视觉教程</h3><p>事件 FSM、Actor/Critic one-hot、当前阶段进度。</p><p class="boundary"><strong>验收边界：</strong>注册 P0 与公开视觉教程的配置和验收需分开。</p><a href="reference/parts/isaac/task_cards/so101_typing.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="grasp-place" data-search="stackcube-v1 stackcube-v1 maniskill 抓取 / 堆叠 抓住、放置、松手与静止奖励按条件覆盖。 无机器人返回初态要求。"><div class="task-project">ManiSkill · 抓取 / 堆叠</div><span class="tag">源码已核验</span><h3>StackCube-v1</h3><p>抓住、放置、松手与静止奖励按条件覆盖。</p><p class="boundary"><strong>验收边界：</strong>无机器人返回初态要求。</p><a href="reference/parts/maniskill/task_cards/StackCube-v1.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="insertion-assembly" data-search="peginsertionside-v1 peginsertionside-v1 maniskill 插入 / 装配 销头与销中心双点对齐后才激活插入项。 插入成功不要求释放或撤回。"><div class="task-project">ManiSkill · 插入 / 装配</div><span class="tag">源码已核验</span><h3>PegInsertionSide-v1</h3><p>销头与销中心双点对齐后才激活插入项。</p><p class="boundary"><strong>验收边界：</strong>插入成功不要求释放或撤回。</p><a href="reference/parts/maniskill/task_cards/PegInsertionSide-v1.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="insertion-assembly" data-search="factory-peginsert-direct-v0 isaac-factory-peginsert-direct-v0 isaac lab v2.3.0 插入 / 装配 多尺度关键点、特权 critic 与循环 ppo。 初态已抓住销，只训练孔口附近的插入。"><div class="task-project">Isaac Lab v2.3.0 · 插入 / 装配</div><span class="tag">源码已核验</span><h3>Factory-PegInsert-Direct-v0</h3><p>多尺度关键点、特权 Critic 与循环 PPO。</p><p class="boundary"><strong>验收边界：</strong>初态已抓住销，只训练孔口附近的插入。</p><a href="reference/parts/isaac/task_cards/isaaclab_factory.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="grasp-place" data-search="pickcube-v1 pickcube-v1 maniskill 抓取 / 堆叠 抓取与抬升的基本条件门控。 目标位置和机器人静止；不要求松手。"><div class="task-project">ManiSkill · 抓取 / 堆叠</div><span class="tag">源码已核验</span><h3>PickCube-v1</h3><p>抓取与抬升的基本条件门控。</p><p class="boundary"><strong>验收边界：</strong>目标位置和机器人静止；不要求松手。</p><a href="reference/parts/maniskill/task_cards/PickCube-v1.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="bimanual" data-search="tworobotstackcube-v1 tworobotstackcube-v1 maniskill 双臂 / 双手 单个联合 actor；奖励中包含右臂让位项。 让位没有全部进入 success 条件。"><div class="task-project">ManiSkill · 双臂 / 双手</div><span class="tag">源码已核验</span><h3>TwoRobotStackCube-v1</h3><p>单个联合 Actor；奖励中包含右臂让位项。</p><p class="boundary"><strong>验收边界：</strong>让位没有全部进入 success 条件。</p><a href="reference/parts/maniskill/task_cards/TwoRobotStackCube-v1.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="mobile-manipulation" data-search="opencabinetdrawer-v1 opencabinetdrawer-v1 maniskill 移动操作 接近把手、抓取和开启奖励。 开足后奖励与静止验收存在语义差异。"><div class="task-project">ManiSkill · 移动操作</div><span class="tag">源码已核验</span><h3>OpenCabinetDrawer-v1</h3><p>接近把手、抓取和开启奖励。</p><p class="boundary"><strong>验收边界：</strong>开足后奖励与静止验收存在语义差异。</p><a href="reference/parts/maniskill/task_cards/OpenCabinetDrawer-v1.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="articulated" data-search="turnfaucet-v1 turnfaucet-v1 maniskill 抽屉 / 关节物体 保留关节物体任务的环境与成功条件。 所查版本未核实可用密集 ppo 配置。"><div class="task-project">ManiSkill · 抽屉 / 关节物体</div><span class="tag">源码已核验</span><h3>TurnFaucet-v1</h3><p>保留关节物体任务的环境与成功条件。</p><p class="boundary"><strong>验收边界：</strong>所查版本未核实可用密集 PPO 配置。</p><a href="reference/parts/maniskill/task_cards/TurnFaucet-v1.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="insertion-assembly" data-search="assemblingkits-v1 assemblingkits-v1 maniskill 插入 / 装配 装配环境可用作任务定义参考。 所查版本为稀疏奖励，无已核验任务 ppo 配置。"><div class="task-project">ManiSkill · 插入 / 装配</div><span class="tag">源码已核验</span><h3>AssemblingKits-v1</h3><p>装配环境可用作任务定义参考。</p><p class="boundary"><strong>验收边界：</strong>所查版本为稀疏奖励，无已核验任务 PPO 配置。</p><a href="reference/parts/maniskill/task_cards/AssemblingKits-v1.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="grasp-place" data-search="lift-cube-franka-v0 isaac-lift-cube-franka-v0 isaac lab v2.3.0 抓取 / 堆叠 高度条件门控目标追踪奖励。 无独立完整成功布尔量；有掉落与超时终止。"><div class="task-project">Isaac Lab v2.3.0 · 抓取 / 堆叠</div><span class="tag">源码已核验</span><h3>Lift-Cube-Franka-v0</h3><p>高度条件门控目标追踪奖励。</p><p class="boundary"><strong>验收边界：</strong>无独立完整成功布尔量；有掉落与超时终止。</p><a href="reference/parts/isaac/task_cards/isaaclab_lift.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="articulated" data-search="franka-cabinet-direct-v0 isaac-franka-cabinet-direct-v0 isaac lab v2.3.0 抽屉 / 关节物体 连续几何塑形与开启奖励。 开启即终止，不包含返回和停稳。"><div class="task-project">Isaac Lab v2.3.0 · 抽屉 / 关节物体</div><span class="tag">源码已核验</span><h3>Franka-Cabinet-Direct-v0</h3><p>连续几何塑形与开启奖励。</p><p class="boundary"><strong>验收边界：</strong>开启即终止，不包含返回和停稳。</p><a href="reference/parts/isaac/task_cards/isaaclab_cabinet.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="grasp-place" data-search="frankacubestack frankacubestack isaacgymenvs (archived) 抓取 / 堆叠 几何条件组合，成功奖励替换密集奖励。 旧项目；释放检查是几何代理，无连续停稳。"><div class="task-project">IsaacGymEnvs (archived) · 抓取 / 堆叠</div><span class="tag">源码已核验</span><h3>FrankaCubeStack</h3><p>几何条件组合，成功奖励替换密集奖励。</p><p class="boundary"><strong>验收边界：</strong>旧项目；释放检查是几何代理，无连续停稳。</p><a href="reference/parts/isaac/task_cards/isaacgym_stack.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="grasp-place" data-search="stack-cube-franka-v0 · ppo 负例 isaac-stack-cube-franka-v0 (negative ppo baseline example) isaac lab v2.3.0 抓取 / 堆叠 反例：任务目录存在不等于已提供 ppo 基线。 所查注册以模仿学习为主，rewards=none。"><div class="task-project">Isaac Lab v2.3.0 · 抓取 / 堆叠</div><span class="tag">部分核验</span><h3>Stack-Cube-Franka-v0 · PPO 负例</h3><p>反例：任务目录存在不等于已提供 PPO 基线。</p><p class="boundary"><strong>验收边界：</strong>所查注册以模仿学习为主，rewards=None。</p><a href="reference/parts/isaac/task_cards/isaaclab_stack_negative.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="grasp-place" data-search="pandapickcubecartesian (rss2025) pandapickcubecartesian (rss2025) mujoco playground 抓取 / 堆叠 只奖励历史最高分的新进展；区分状态与视觉变体。 视觉成功只检查高度差；brax 部分默认值未知。"><div class="task-project">MuJoCo Playground · 抓取 / 堆叠</div><span class="tag">部分核验</span><h3>PandaPickCubeCartesian (RSS2025)</h3><p>只奖励历史最高分的新进展；区分状态与视觉变体。</p><p class="boundary"><strong>验收边界：</strong>视觉成功只检查高度差；Brax 部分默认值未知。</p><a href="reference/parts/breadth/task_cards/playground__PandaPickCubeCartesian.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="articulated" data-search="pandaopencabinet (rss2025) pandaopencabinet (rss2025) mujoco playground 抽屉 / 关节物体 接近事件锁存与开启几何奖励。 没有明确成功验收；不能由回报推断成功。"><div class="task-project">MuJoCo Playground · 抽屉 / 关节物体</div><span class="tag">部分核验</span><h3>PandaOpenCabinet (RSS2025)</h3><p>接近事件锁存与开启几何奖励。</p><p class="boundary"><strong>验收边界：</strong>没有明确成功验收；不能由回报推断成功。</p><a href="reference/parts/breadth/task_cards/playground__PandaOpenCabinet.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="press-switch" data-search="button-press-v3 / reward v2 button-press-v3 / reward v2 meta-world 按钮 / 按键 靠近后激活按压奖励，可参考局部几何塑形。 无保持、释放、撤回和重复按压验收。"><div class="task-project">Meta-World · 按钮 / 按键</div><span class="tag">部分核验</span><h3>button-press-v3 / reward v2</h3><p>靠近后激活按压奖励，可参考局部几何塑形。</p><p class="boundary"><strong>验收边界：</strong>无保持、释放、撤回和重复按压验收。</p><a href="reference/parts/breadth/task_cards/metaworld__button-press-v3.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="grasp-place" data-search="stack, reward_shaping=true explicit variant stack, reward_shaping=true explicit variant robosuite 抓取 / 堆叠 max 组合塑形；接触与松手共同参与堆叠成功。 无连续保持；无已核验任务专属 ppo 配置。"><div class="task-project">robosuite · 抓取 / 堆叠</div><span class="tag">部分核验</span><h3>Stack, reward_shaping=True explicit variant</h3><p>max 组合塑形；接触与松手共同参与堆叠成功。</p><p class="boundary"><strong>验收边界：</strong>无连续保持；无已核验任务专属 PPO 配置。</p><a href="reference/parts/breadth/task_cards/robosuite__Stack.html">公式、接口与配置 →</a></article><article class="card task-card" data-family="bimanual" data-search="shadowhandover shadowhandover / single-agent ppo / egg full_state bi-dexhands 双臂 / 双手 双手联合控制与目标事件锁存。 成功不检查接收手抓稳、原手释放或停稳。"><div class="task-project">Bi-DexHands · 双臂 / 双手</div><span class="tag">源码已核验</span><h3>ShadowHandOver</h3><p>双手联合控制与目标事件锁存。</p><p class="boundary"><strong>验收边界：</strong>成功不检查接收手抓稳、原手释放或停稳。</p><a href="reference/parts/breadth/task_cards/bidexhands__ShadowHandOver.html">公式、接口与配置 →</a></article></div><p id="task-empty" hidden>没有匹配的任务。试试更短的关键词或选择全部类型。</p>
+</section>
+<section id="rewards">
+  <div class="section-heading"><span class="section-number">04</span><div><p class="eyebrow">奖励设计的四种机制</p><h2>先区分“激活条件”和“计算方式”</h2></div></div>
+  <div class="reward-grid">
+    <article class="card"><span class="tag">ManiSkill · 条件覆盖</span><h3>每步选择当前目标</h3><pre>抓住前：接近物块
+抓住后：放置目标
+叠好后：松手 + 物块静止</pre><p>当前物理状态决定 reward 分支，后段覆盖前段。状态可以回退，通常不记录“曾经做过”。</p><a href="reference/parts/maniskill/task_cards/StackCube-v1.html">精确系数与源码 →</a></article>
+    <article class="card"><span class="tag">SO101 · 事件门控</span><h3>只有当前阶段领取进度</h3><pre>r_progress = clip(
+  (d_previous − d_current) / scale,
+  −1, 1)
+切换目标 / 阶段的当步：进度为 0</pre><p>接近和撤离采用各自的距离定义。一次性事件奖励单独记账，避免重复触发。</p><a href="reference/parts/isaac/task_cards/so101_typing.html">三个事件状态与奖励 →</a></article>
+    <article class="card"><span class="tag">Playground · 历史最高分</span><h3>只奖励新取得的进展</h3><pre>r = max(S_current − M_previous, 0)
+M = max(S_current, M_previous)</pre><p>同一回合中，再次到达旧高度不会重复领分。退步本身不扣分，与有符号进度不同。</p><a href="reference/parts/breadth/task_cards/playground__PandaPickCubeCartesian.html">初态和奖励的完整条件 →</a></article>
+    <article class="card"><span class="tag">PBRS · 势函数塑形</span><h3>折扣和终止边界也在公式里</h3><pre>F(s, s′) = γΦ(s′) − Φ(s)
+若 Φ = −D：F = D(s) − γD(s′)</pre><p>普通距离差没有右侧的 γ。策略不变性有条件，不能直接套到任意阶段奖励上。</p><a href="reference/03_reward_patterns.html">数学区别与原论文 →</a></article>
+  </div>
+  <div class="note amber"><strong>复制权重前，先检查时间单位</strong><p>Isaac Lab manager 路径还会乘控制周期 dt，Direct 路径则按任务实现。相同 weight 并不等于相同每步奖励。任务成功、终止和重复事件也要一起检查。</p></div>
+</section>
+<section id="configs">
+  <div class="section-heading"><span class="section-number">05</span><div><p class="eyebrow">生效训练配置</p><h2>预算对应入口，不能跨版本拼参数</h2></div></div>
+  <p>下表为固定源码版本中的配置预算，并非最少收敛步数。未知字段保留“未知”；展开一行可查看全部超参数、命令、输入权限与源码证据。</p>
+  <label class="search-label config-search"><span>筛选配置</span><input type="search" id="config-search" placeholder="例如：SO101、vision、Stack、Factory"></label>
+  <div class="table-wrap"><table class="config-table"><thead><tr><th>任务 / 入口</th><th>环境数</th><th>采样长度</th><th>配置总步数</th><th>学习率</th><th>γ</th><th>详情</th></tr></thead><tbody><tr class="config-row" data-detail="config-detail-0" data-search="pickcube-v1 example_state ms_config_pickcube-v1_example_state cleanrl-derived"><td>PickCube-v1<small>example_state</small></td><td>1,024</td><td>50</td><td>10,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-0">展开</button></td></tr><tr class="config-detail" id="config-detail-0" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo.py --env_id=PickCube-v1 --num_envs=1024 --update_epochs=8 --num_minibatches=32 --total_timesteps=10000000 --num_steps=50 --num_eval_steps=50&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/examples.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 1024,
+    &quot;num_steps&quot;: 50,
+    &quot;num_eval_envs&quot;: 8,
+    &quot;num_eval_steps&quot;: 50,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 10000000,
+    &quot;seed&quot;: 1,
+    &quot;batch_size&quot;: 51200,
+    &quot;minibatch_size&quot;: 1600,
+    &quot;num_iterations&quot;: 195,
+    &quot;actual_sample_budget_if_completed&quot;: 9984000,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: -0.5,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/examples.sh#L1-L26">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-1" data-search="stackcube-v1 example_state ms_config_stackcube-v1_example_state cleanrl-derived"><td>StackCube-v1<small>example_state</small></td><td>1,024</td><td>50</td><td>25,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-1">展开</button></td></tr><tr class="config-detail" id="config-detail-1" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo.py --env_id=StackCube-v1 --num_envs=1024 --update_epochs=8 --num_minibatches=32 --total_timesteps=25000000 --num_steps=50 --num_eval_steps=50&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/examples.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 1024,
+    &quot;num_steps&quot;: 50,
+    &quot;num_eval_envs&quot;: 8,
+    &quot;num_eval_steps&quot;: 50,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 25000000,
+    &quot;seed&quot;: 1,
+    &quot;batch_size&quot;: 51200,
+    &quot;minibatch_size&quot;: 1600,
+    &quot;num_iterations&quot;: 488,
+    &quot;actual_sample_budget_if_completed&quot;: 24985600,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: -0.5,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/examples.sh#L1-L26">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-2" data-search="peginsertionside-v1 example_state ms_config_peginsertionside-v1_example_state cleanrl-derived"><td>PegInsertionSide-v1<small>example_state</small></td><td>1,024</td><td>100</td><td>250,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-2">展开</button></td></tr><tr class="config-detail" id="config-detail-2" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo.py --env_id=PegInsertionSide-v1 --num_envs=1024 --update_epochs=8 --num_minibatches=32 --total_timesteps=250000000 --num_steps=100 --num_eval_steps=100&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/examples.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 1024,
+    &quot;num_steps&quot;: 100,
+    &quot;num_eval_envs&quot;: 8,
+    &quot;num_eval_steps&quot;: 100,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 250000000,
+    &quot;seed&quot;: 1,
+    &quot;batch_size&quot;: 102400,
+    &quot;minibatch_size&quot;: 3200,
+    &quot;num_iterations&quot;: 2441,
+    &quot;actual_sample_budget_if_completed&quot;: 249958400,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: -0.5,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/examples.sh#L1-L26">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-3" data-search="tworobotstackcube-v1 example_state ms_config_tworobotstackcube-v1_example_state cleanrl-derived"><td>TwoRobotStackCube-v1<small>example_state</small></td><td>1,024</td><td>100</td><td>40,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-3">展开</button></td></tr><tr class="config-detail" id="config-detail-3" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo.py --env_id=TwoRobotStackCube-v1 --num_envs=1024 --update_epochs=8 --num_minibatches=32 --total_timesteps=40000000 --num_steps=100 --num_eval_steps=100&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/examples.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 1024,
+    &quot;num_steps&quot;: 100,
+    &quot;num_eval_envs&quot;: 8,
+    &quot;num_eval_steps&quot;: 100,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 40000000,
+    &quot;seed&quot;: 1,
+    &quot;batch_size&quot;: 102400,
+    &quot;minibatch_size&quot;: 3200,
+    &quot;num_iterations&quot;: 390,
+    &quot;actual_sample_budget_if_completed&quot;: 39936000,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: -0.5,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/examples.sh#L1-L26">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-4" data-search="opencabinetdrawer-v1 example_state ms_config_opencabinetdrawer-v1_example_state cleanrl-derived"><td>OpenCabinetDrawer-v1<small>example_state</small></td><td>1,024</td><td>100</td><td>10,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-4">展开</button></td></tr><tr class="config-detail" id="config-detail-4" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo.py --env_id=OpenCabinetDrawer-v1 --num_envs=1024 --update_epochs=8 --num_minibatches=32 --total_timesteps=10000000 --num_steps=100 --num_eval_steps=100&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/examples.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 1024,
+    &quot;num_steps&quot;: 100,
+    &quot;num_eval_envs&quot;: 8,
+    &quot;num_eval_steps&quot;: 100,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 10000000,
+    &quot;seed&quot;: 1,
+    &quot;batch_size&quot;: 102400,
+    &quot;minibatch_size&quot;: 3200,
+    &quot;num_iterations&quot;: 97,
+    &quot;actual_sample_budget_if_completed&quot;: 9932800,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: -0.5,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L24-L161">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo.py#L174-L224">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/examples.sh#L94-L96">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-5" data-search="pickcube-v1 baseline_state ms_config_pickcube-v1_baseline_state cleanrl-derived"><td>PickCube-v1<small>baseline_state</small></td><td>4,096</td><td>4</td><td>50,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-5">展开</button></td></tr><tr class="config-detail" id="config-detail-5" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo_fast.py --env_id=PickCube-v1 --num_envs=4096 --num_steps=4 --num_eval_envs=16 --update_epochs=8 --num_minibatches=32 --total_timesteps=50000000 --cudagraphs --seed=9351 # repeat 4796,1788 separately&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo_fast.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/baselines.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 4096,
+    &quot;num_steps&quot;: 4,
+    &quot;num_eval_envs&quot;: 16,
+    &quot;num_eval_steps&quot;: 50,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 50000000,
+    &quot;seed&quot;: 9351,
+    &quot;batch_size&quot;: 16384,
+    &quot;minibatch_size&quot;: 512,
+    &quot;num_iterations&quot;: 3051,
+    &quot;actual_sample_budget_if_completed&quot;: 49987584,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: 0,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L3-L24">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L3-L24">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-6" data-search="stackcube-v1 baseline_state ms_config_stackcube-v1_baseline_state cleanrl-derived"><td>StackCube-v1<small>baseline_state</small></td><td>4,096</td><td>16</td><td>50,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-6">展开</button></td></tr><tr class="config-detail" id="config-detail-6" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo_fast.py --env_id=StackCube-v1 --num_envs=4096 --num_steps=16 --num_eval_envs=16 --update_epochs=8 --num_minibatches=32 --total_timesteps=50000000 --cudagraphs --seed=9351 # repeat 4796,1788 separately&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo_fast.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/baselines.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 4096,
+    &quot;num_steps&quot;: 16,
+    &quot;num_eval_envs&quot;: 16,
+    &quot;num_eval_steps&quot;: 50,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 50000000,
+    &quot;seed&quot;: 9351,
+    &quot;batch_size&quot;: 65536,
+    &quot;minibatch_size&quot;: 2048,
+    &quot;num_iterations&quot;: 762,
+    &quot;actual_sample_budget_if_completed&quot;: 49938432,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: 0,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L57-L65">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L3-L24">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-7" data-search="peginsertionside-v1 baseline_state ms_config_peginsertionside-v1_baseline_state cleanrl-derived"><td>PegInsertionSide-v1<small>baseline_state</small></td><td>2,048</td><td>16</td><td>75,000,000</td><td>0.0003</td><td>0.97</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-7">展开</button></td></tr><tr class="config-detail" id="config-detail-7" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo_fast.py --env_id=PegInsertionSide-v1 --num_envs=2048 --num_steps=16 --num_eval_envs=16 --update_epochs=8 --num_minibatches=32 --total_timesteps=75000000 --num_eval_steps=100 --gamma=0.97 --gae_lambda=0.95 --cudagraphs --seed=9351 # repeat 4796,1788 separately&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo_fast.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/baselines.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 2048,
+    &quot;num_steps&quot;: 16,
+    &quot;num_eval_envs&quot;: 16,
+    &quot;num_eval_steps&quot;: 100,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.97,
+    &quot;gae_lambda&quot;: 0.95,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 75000000,
+    &quot;seed&quot;: 9351,
+    &quot;batch_size&quot;: 32768,
+    &quot;minibatch_size&quot;: 1024,
+    &quot;num_iterations&quot;: 2288,
+    &quot;actual_sample_budget_if_completed&quot;: 74973184,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: 0,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L117-L125">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L3-L24">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-8" data-search="opencabinetdrawer-v1 baseline_state ms_config_opencabinetdrawer-v1_baseline_state cleanrl-derived"><td>OpenCabinetDrawer-v1<small>baseline_state</small></td><td>1,024</td><td>16</td><td>50,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-8">展开</button></td></tr><tr class="config-detail" id="config-detail-8" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo_fast.py --env_id=OpenCabinetDrawer-v1 --num_envs=1024 --num_steps=16 --num_eval_envs=16 --update_epochs=8 --num_minibatches=32 --total_timesteps=50000000 --num_eval_steps=100 --cudagraphs --seed=9351 # repeat 4796,1788 separately&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo_fast.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/baselines.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 1024,
+    &quot;num_steps&quot;: 16,
+    &quot;num_eval_envs&quot;: 16,
+    &quot;num_eval_steps&quot;: 100,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.1,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 50000000,
+    &quot;seed&quot;: 9351,
+    &quot;batch_size&quot;: 16384,
+    &quot;minibatch_size&quot;: 512,
+    &quot;num_iterations&quot;: 3051,
+    &quot;actual_sample_budget_if_completed&quot;: 49987584,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      256
+    ],
+    &quot;initial_logstd&quot;: 0,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_fast.py#L62-L164">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L157-L165">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L3-L24">源码证据 3 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-9" data-search="pickcube-v1 baseline_rgb ms_config_pickcube-v1_baseline_rgb cleanrl-derived"><td>PickCube-v1<small>baseline_rgb</small></td><td>1,024</td><td>16</td><td>50,000,000</td><td>0.0003</td><td>0.8</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-9">展开</button></td></tr><tr class="config-detail" id="config-detail-9" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;cleanrl-derived&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python ppo_rgb.py --env_id=PickCube-v1 --num_envs=1024 --num_steps=16 --num_eval_envs=16 --update_epochs=8 --num_minibatches=32 --total_timesteps=50000000 --seed=9351 # repeat 4796,1788 separately&quot;,
+  &quot;config_chain&quot;: [
+    &quot;examples/baselines/ppo/ppo_rgb.py Args defaults&quot;,
+    &quot;examples/baselines/ppo/baselines.sh task CLI overrides&quot;
+  ],
+  &quot;source_revision&quot;: &quot;62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 1024,
+    &quot;num_steps&quot;: 16,
+    &quot;num_eval_envs&quot;: 16,
+    &quot;num_eval_steps&quot;: 50,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 32,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;anneal_lr&quot;: false,
+    &quot;gamma&quot;: 0.8,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;norm_adv&quot;: true,
+    &quot;clip_coef&quot;: 0.2,
+    &quot;clip_vloss&quot;: false,
+    &quot;ent_coef&quot;: 0.0,
+    &quot;vf_coef&quot;: 0.5,
+    &quot;max_grad_norm&quot;: 0.5,
+    &quot;target_kl&quot;: 0.2,
+    &quot;reward_scale&quot;: 1.0,
+    &quot;finite_horizon_gae&quot;: false,
+    &quot;partial_reset&quot;: true,
+    &quot;eval_partial_reset&quot;: false,
+    &quot;control_mode&quot;: &quot;pd_joint_delta_pos&quot;,
+    &quot;total_timesteps&quot;: 50000000,
+    &quot;seed&quot;: 9351,
+    &quot;include_state&quot;: true,
+    &quot;batch_size&quot;: 16384,
+    &quot;minibatch_size&quot;: 512,
+    &quot;num_iterations&quot;: 3051,
+    &quot;actual_sample_budget_if_completed&quot;: 49987584,
+    &quot;actor_layers&quot;: [
+      512
+    ],
+    &quot;critic_layers&quot;: [
+      512
+    ],
+    &quot;initial_logstd&quot;: -0.5,
+    &quot;control_hz&quot;: 20,
+    &quot;advantage_normalization&quot;: true,
+    &quot;running_observation_normalization&quot;: false,
+    &quot;reward_mode&quot;: &quot;normalized_dense&quot;,
+    &quot;reward_dt_multiplier&quot;: 1
+  },
+  &quot;notes&quot;: &quot;Code/config resolved only; script command documented/tested upstream, no independently reproduced success or hardware/time claim. Actual steps floor to complete rollout.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_rgb.py#L54-L111">源码证据 1 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/ppo_rgb.py#L176-L251">源码证据 2 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L188-L196">源码证据 3 ↗</a><a href="https://github.com/mani-skill/ManiSkill/blob/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/examples/baselines/ppo/baselines.sh#L3-L24">源码证据 4 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-10" data-search="lift-cube-franka-v0 isaac_config_lift isaac_config_lift rsl_rl"><td>Lift-Cube-Franka-v0<small>isaac_config_lift</small></td><td>4,096</td><td>24</td><td>147,456,000</td><td>0.0001</td><td>0.98</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-10">展开</button></td></tr><tr class="config-detail" id="config-detail-10" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;rsl_rl&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py --task Isaac-Lift-Cube-Franka-v0 --headless&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: &quot;3c6e67bb5c7ada942a6d1884ab69338f57596f77&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 4096,
+    &quot;rollout_steps&quot;: 24,
+    &quot;max_iterations&quot;: 1500,
+    &quot;total_timesteps&quot;: 147456000,
+    &quot;update_epochs&quot;: 5,
+    &quot;num_minibatches&quot;: 4,
+    &quot;minibatch_size_derived&quot;: 24576,
+    &quot;gamma&quot;: 0.98,
+    &quot;gae_lambda&quot;: 0.95,
+    &quot;clip_range&quot;: 0.2,
+    &quot;entropy_coef&quot;: 0.006,
+    &quot;learning_rate&quot;: 0.0001,
+    &quot;schedule&quot;: &quot;adaptive&quot;,
+    &quot;target_kl&quot;: 0.01,
+    &quot;max_grad_norm&quot;: 1.0,
+    &quot;value_loss_coef&quot;: 1.0,
+    &quot;actor_layers&quot;: [
+      256,
+      128,
+      64
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      128,
+      64
+    ],
+    &quot;activation&quot;: &quot;elu&quot;,
+    &quot;initial_noise_std&quot;: 1.0,
+    &quot;actor_obs_normalization&quot;: false,
+    &quot;critic_obs_normalization&quot;: false,
+    &quot;seed&quot;: 42,
+    &quot;control_hz&quot;: 50
+  },
+  &quot;notes&quot;: &quot;Derived configured sample cap, not observed convergence; no CLI overrides selected.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/manager_based/manipulation/lift/config/franka/__init__.py#L19-L30">源码证据 1 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/manager_based/manipulation/lift/lift_env_cfg.py#L95-L222">源码证据 2 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/manager_based/manipulation/lift/config/franka/agents/rsl_rl_ppo_cfg.py#L12-L38">源码证据 3 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_rl/isaaclab_rl/rsl_rl/rl_cfg.py#L133-L175">源码证据 4 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-11" data-search="franka-cabinet-direct-v0 isaac_config_cabinet isaac_config_cabinet rsl_rl"><td>Franka-Cabinet-Direct-v0<small>isaac_config_cabinet</small></td><td>4,096</td><td>16</td><td>98,304,000</td><td>0.0005</td><td>0.99</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-11">展开</button></td></tr><tr class="config-detail" id="config-detail-11" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;rsl_rl&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py --task Isaac-Franka-Cabinet-Direct-v0 --headless&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: &quot;3c6e67bb5c7ada942a6d1884ab69338f57596f77&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 4096,
+    &quot;rollout_steps&quot;: 16,
+    &quot;max_iterations&quot;: 1500,
+    &quot;total_timesteps&quot;: 98304000,
+    &quot;update_epochs&quot;: 8,
+    &quot;num_minibatches&quot;: 8,
+    &quot;minibatch_size_derived&quot;: 8192,
+    &quot;gamma&quot;: 0.99,
+    &quot;gae_lambda&quot;: 0.95,
+    &quot;clip_range&quot;: 0.2,
+    &quot;entropy_coef&quot;: 0.0,
+    &quot;learning_rate&quot;: 0.0005,
+    &quot;schedule&quot;: &quot;adaptive&quot;,
+    &quot;target_kl&quot;: 0.008,
+    &quot;max_grad_norm&quot;: 1.0,
+    &quot;value_loss_coef&quot;: 1.0,
+    &quot;actor_layers&quot;: [
+      256,
+      128,
+      64
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      128,
+      64
+    ],
+    &quot;activation&quot;: &quot;elu&quot;,
+    &quot;initial_noise_std&quot;: 1.0,
+    &quot;actor_obs_normalization&quot;: true,
+    &quot;critic_obs_normalization&quot;: true,
+    &quot;seed&quot;: 42,
+    &quot;control_hz&quot;: 60
+  },
+  &quot;notes&quot;: &quot;Configured cap, not runtime success evidence.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/franka_cabinet/__init__.py#L17-L27">源码证据 1 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/franka_cabinet/franka_cabinet_env.py#L26-L158">源码证据 2 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/franka_cabinet/agents/rsl_rl_ppo_cfg.py#L12-L38">源码证据 3 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_rl/isaaclab_rl/rsl_rl/rl_cfg.py#L133-L175">源码证据 4 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-12" data-search="factory-peginsert-direct-v0 isaac_config_factory isaac_config_factory rl_games"><td>Factory-PegInsert-Direct-v0<small>isaac_config_factory</small></td><td>128</td><td>128</td><td>3,276,800</td><td>0.0001</td><td>0.995</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-12">展开</button></td></tr><tr class="config-detail" id="config-detail-12" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;rl_games&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;./isaaclab.sh -p scripts/reinforcement_learning/rl_games/train.py --task Isaac-Factory-PegInsert-Direct-v0 --headless&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: &quot;3c6e67bb5c7ada942a6d1884ab69338f57596f77&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 128,
+    &quot;rollout_steps&quot;: 128,
+    &quot;max_epochs&quot;: 200,
+    &quot;total_timesteps&quot;: 3276800,
+    &quot;update_epochs&quot;: 4,
+    &quot;minibatch_size&quot;: 512,
+    &quot;gamma&quot;: 0.995,
+    &quot;gae_lambda&quot;: 0.95,
+    &quot;clip_range&quot;: 0.2,
+    &quot;entropy_coef&quot;: 0.0,
+    &quot;learning_rate&quot;: 0.0001,
+    &quot;schedule&quot;: &quot;adaptive&quot;,
+    &quot;target_kl&quot;: 0.008,
+    &quot;max_grad_norm&quot;: 1.0,
+    &quot;critic_coef&quot;: 2,
+    &quot;actor_layers&quot;: [
+      512,
+      128,
+      64
+    ],
+    &quot;critic_layers&quot;: [
+      512,
+      128,
+      64
+    ],
+    &quot;lstm_hidden&quot;: 1024,
+    &quot;lstm_layers&quot;: 2,
+    &quot;lstm_before_mlp&quot;: true,
+    &quot;sequence_length&quot;: 128,
+    &quot;normalize_input&quot;: true,
+    &quot;normalize_value&quot;: true,
+    &quot;mixed_precision&quot;: true,
+    &quot;seed&quot;: 0,
+    &quot;control_hz&quot;: 15
+  },
+  &quot;notes&quot;: &quot;RL Games a2c_continuous with ppo=True is PPO. Central privileged recurrent critic. Configured cap not measured convergence.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/factory/__init__.py#L17-L25">源码证据 1 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/factory/factory_env_cfg.py#L17-L119">源码证据 2 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/factory/agents/rl_games_ppo_cfg.yaml#L7-L123">源码证据 3 ↗</a><a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/scripts/reinforcement_learning/rl_games/train.py#L205-L214">源码证据 4 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-13" data-search="frankacubestack isaac_config_legacy_stack isaac_config_legacy_stack rl_games"><td>FrankaCubeStack<small>isaac_config_legacy_stack</small></td><td>8,192</td><td>32</td><td>2,621,440,000</td><td>0.0005</td><td>0.99</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-13">展开</button></td></tr><tr class="config-detail" id="config-detail-13" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;rl_games&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;python isaacgymenvs/train.py task=FrankaCubeStack headless=True&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: &quot;aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 8192,
+    &quot;rollout_steps&quot;: 32,
+    &quot;max_epochs&quot;: 10000,
+    &quot;total_timesteps&quot;: 2621440000,
+    &quot;update_epochs&quot;: 5,
+    &quot;minibatch_size&quot;: 16384,
+    &quot;gamma&quot;: 0.99,
+    &quot;gae_lambda&quot;: 0.95,
+    &quot;clip_range&quot;: 0.2,
+    &quot;entropy_coef&quot;: 0.0,
+    &quot;learning_rate&quot;: 0.0005,
+    &quot;schedule&quot;: &quot;adaptive&quot;,
+    &quot;target_kl&quot;: 0.008,
+    &quot;max_grad_norm&quot;: 1.0,
+    &quot;critic_coef&quot;: 4,
+    &quot;actor_layers&quot;: [
+      256,
+      128,
+      64
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      128,
+      64
+    ],
+    &quot;shared_network&quot;: true,
+    &quot;activation&quot;: &quot;elu&quot;,
+    &quot;normalize_input&quot;: true,
+    &quot;normalize_value&quot;: true,
+    &quot;seed&quot;: 42,
+    &quot;control_hz&quot;: 59.98800239952009
+  },
+  &quot;notes&quot;: &quot;Legacy default cap2.62b; not observed training-to-success. No recurrent net despite seq_len4 config.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/isaac-sim/IsaacGymEnvs/blob/aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3/isaacgymenvs/cfg/task/FrankaCubeStack.yaml#L1-L61">源码证据 1 ↗</a><a href="https://github.com/isaac-sim/IsaacGymEnvs/blob/aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3/isaacgymenvs/cfg/train/FrankaCubeStackPPO.yaml#L1-L71">源码证据 2 ↗</a><a href="https://github.com/isaac-sim/IsaacGymEnvs/blob/aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3/isaacgymenvs/cfg/config.yaml#L1-L40">源码证据 3 ↗</a><a href="https://github.com/isaac-sim/IsaacGymEnvs/blob/aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3/isaacgymenvs/tasks/base/vec_task.py#L106-L114">源码证据 4 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-14" data-search="so101 按键 · 注册 p0 isaac_config_typing_p0 isaac_config_typing_p0 rsl_rl"><td>SO101 按键 · 注册 P0<small>isaac_config_typing_p0</small></td><td>4,096</td><td>64</td><td>5,242,880,000</td><td>0.0001</td><td>0.995</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-14">展开</button></td></tr><tr class="config-detail" id="config-detail-14" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;rsl_rl&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;Registered task entry: scripts/reinforcement_learning/rsl_rl/train_rsl_rl.py --task Isaac-Keyboard-SO101-MX-Physical-Calibrated-20260718-FixedCartesian-AnchorBench-P0 (container/version setup required; not run)&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: &quot;7aec2ed26dce8c88ae007a2714680cce572e1466&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 4096,
+    &quot;rollout_steps&quot;: 64,
+    &quot;max_iterations&quot;: 20000,
+    &quot;total_timesteps&quot;: 5242880000,
+    &quot;update_epochs&quot;: 5,
+    &quot;num_minibatches&quot;: 4,
+    &quot;gamma&quot;: 0.995,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;clip_range&quot;: 0.2,
+    &quot;entropy_coef&quot;: 0.005,
+    &quot;learning_rate&quot;: 0.0001,
+    &quot;schedule&quot;: &quot;adaptive&quot;,
+    &quot;target_kl&quot;: 0.01,
+    &quot;max_grad_norm&quot;: 1.0,
+    &quot;value_loss_coef&quot;: 1.0,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      128
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      128
+    ],
+    &quot;activation&quot;: &quot;elu&quot;,
+    &quot;distribution&quot;: &quot;Beta [-1,1]&quot;,
+    &quot;actor_obs_normalization&quot;: true,
+    &quot;critic_obs_normalization&quot;: true,
+    &quot;seed&quot;: null,
+    &quot;control_hz&quot;: 25
+  },
+  &quot;notes&quot;: &quot;Raw registered P0 defaults, NOT tutorial effective64-env run. This huge cap is not claimed observed runtime or a recommended budget.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/__init__.py#L17-L46">源码证据 1 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/physical_calibrated_20260718_env_cfg.py#L165-L188">源码证据 2 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/agents/rsl_rl_ppo_cfg.py#L22-L113">源码证据 3 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/fixed_cartesian_env_cfg.py#L35-L234">源码证据 4 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-15" data-search="so101 按键 · 公开视觉教程 isaac_config_typing_tutorial_teacher isaac_config_typing_tutorial_teacher rsl_rl"><td>SO101 按键 · 公开视觉教程<small>isaac_config_typing_tutorial_teacher</small></td><td>64</td><td>32</td><td>10,240,000</td><td>0.0001</td><td>0.995</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-15">展开</button></td></tr><tr class="config-detail" id="config-detail-15" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;rsl_rl&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;./so101 train teacher --gpu 0&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: &quot;7aec2ed26dce8c88ae007a2714680cce572e1466&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 64,
+    &quot;rollout_steps&quot;: 32,
+    &quot;max_iterations&quot;: 5000,
+    &quot;total_timesteps&quot;: 10240000,
+    &quot;update_epochs&quot;: 4,
+    &quot;num_minibatches&quot;: 4,
+    &quot;minibatch_size_derived&quot;: 512,
+    &quot;gamma&quot;: 0.995,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;clip_range&quot;: 0.2,
+    &quot;entropy_coef&quot;: 0.005,
+    &quot;learning_rate&quot;: 0.0001,
+    &quot;schedule&quot;: &quot;fixed&quot;,
+    &quot;target_kl&quot;: 0.01,
+    &quot;max_grad_norm&quot;: 1.0,
+    &quot;value_loss_coef&quot;: 1.0,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      128
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      128
+    ],
+    &quot;activation&quot;: &quot;elu&quot;,
+    &quot;distribution&quot;: &quot;Beta[-1,1]&quot;,
+    &quot;actor_obs_normalization&quot;: true,
+    &quot;critic_obs_normalization&quot;: true,
+    &quot;seed&quot;: 4811,
+    &quot;control_hz&quot;: 25,
+    &quot;actor_observations&quot;: &quot;policy22&quot;,
+    &quot;critic_observations&quot;: &quot;policy22&quot;
+  },
+  &quot;notes&quot;: &quot;Corrected previous20.48m claim: runner_config overrides rollout32 before teacher_config; default10.24m. RSL-RL5.4.1 pinned in Docker.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/configs/tutorial/default.json#L1-L18">源码证据 1 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/tutorial/cli.py#L250-L274">源码证据 2 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/tutorial/runtime.py#L25-L30">源码证据 3 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/tutorial/runtime.py#L87-L101">源码证据 4 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/vision/agent.py#L13-L22">源码证据 5 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/agents/rsl_rl_ppo_cfg.py#L22-L113">源码证据 6 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/vision/runtime.py#L29-L44">源码证据 7 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-16" data-search="so101 按键 · 公开视觉教程 isaac_config_typing_tutorial_vision isaac_config_typing_tutorial_vision rsl_rl"><td>SO101 按键 · 公开视觉教程<small>isaac_config_typing_tutorial_vision</small></td><td>64</td><td>32</td><td>10,240,000</td><td>0.0001</td><td>0.995</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-16">展开</button></td></tr><tr class="config-detail" id="config-detail-16" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;rsl_rl&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;./so101 train vision --teacher output/teacher --checkpoint best --gpu 0&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: &quot;7aec2ed26dce8c88ae007a2714680cce572e1466&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 64,
+    &quot;rollout_steps&quot;: 32,
+    &quot;max_iterations&quot;: 5000,
+    &quot;total_timesteps&quot;: 10240000,
+    &quot;update_epochs&quot;: 4,
+    &quot;num_minibatches&quot;: 4,
+    &quot;minibatch_size_derived&quot;: 512,
+    &quot;gamma&quot;: 0.995,
+    &quot;gae_lambda&quot;: 0.9,
+    &quot;clip_range&quot;: 0.2,
+    &quot;entropy_coef&quot;: 0.005,
+    &quot;learning_rate&quot;: 0.0001,
+    &quot;schedule&quot;: &quot;fixed&quot;,
+    &quot;target_kl&quot;: 0.01,
+    &quot;max_grad_norm&quot;: 1.0,
+    &quot;value_loss_coef&quot;: 1.0,
+    &quot;actor_layers&quot;: [
+      256,
+      256,
+      128
+    ],
+    &quot;critic_layers&quot;: [
+      256,
+      256,
+      128
+    ],
+    &quot;activation&quot;: &quot;elu&quot;,
+    &quot;distribution&quot;: &quot;Beta[-1,1]&quot;,
+    &quot;actor_obs_normalization&quot;: true,
+    &quot;critic_obs_normalization&quot;: true,
+    &quot;seed&quot;: 4811,
+    &quot;control_hz&quot;: 25,
+    &quot;actor_observations&quot;: &quot;RGB6x120x160 + proprio57&quot;,
+    &quot;critic_observations&quot;: &quot;policy22&quot;,
+    &quot;cnn_channels&quot;: [
+      16,
+      32,
+      32
+    ],
+    &quot;cnn_kernels&quot;: [
+      5,
+      3,
+      3
+    ],
+    &quot;cnn_strides&quot;: [
+      2,
+      2,
+      2
+    ],
+    &quot;warmup_iterations&quot;: 300,
+    &quot;warmup_steps_per_iteration&quot;: 32,
+    &quot;warmup_environment_steps&quot;: 614400
+  },
+  &quot;notes&quot;: &quot;Warmup is supervised MSE actor updates with teacher/student mixtures, not PPO. Critic initialized from teacher; then10.24m student PPO samples. No reproduced result.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/configs/tutorial/default.json#L1-L18">源码证据 1 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/tutorial/cli.py#L250-L274">源码证据 2 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/vision/agent.py#L13-L22">源码证据 3 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/agents/rsl_rl_ppo_cfg.py#L22-L113">源码证据 4 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/scripts/vision/train_simple.py#L67-L113">源码证据 5 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/vision_typing_env_cfg.py#L17-L78">源码证据 6 ↗</a><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/mdp/vision_observations.py#L82-L125">源码证据 7 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-17" data-search="pandapickcubecartesian (rss2025) br_pick_state br_pick_state brax"><td>PandaPickCubeCartesian (RSS2025)<small>br_pick_state</small></td><td>1,024</td><td>10</td><td>5,000,000</td><td>0.0005</td><td>0.97</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-17">展开</button></td></tr><tr class="config-detail" id="config-detail-17" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;brax&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;cd rss2025 &amp;&amp; python learning/train_jax_ppo.py --env_name=PandaPickCubeCartesian&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: null,
+  &quot;status&quot;: &quot;partial&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;normalize_observations&quot;: true,
+    &quot;action_repeat&quot;: 1,
+    &quot;discounting&quot;: 0.97,
+    &quot;unroll_length&quot;: 10,
+    &quot;num_updates_per_batch&quot;: 8,
+    &quot;seed&quot;: 1,
+    &quot;gae_lambda&quot;: null,
+    &quot;clipping_epsilon&quot;: null,
+    &quot;value_hidden_layer_sizes&quot;: [
+      256,
+      256,
+      256,
+      256,
+      256
+    ],
+    &quot;value_obs_key&quot;: &quot;state&quot;,
+    &quot;policy_obs_key&quot;: &quot;state&quot;,
+    &quot;num_envs&quot;: 1024,
+    &quot;num_minibatches&quot;: 8,
+    &quot;batch_size&quot;: 256,
+    &quot;learning_rate&quot;: 0.0005,
+    &quot;entropy_cost&quot;: 0.0075,
+    &quot;reward_scaling&quot;: 0.1,
+    &quot;policy_hidden_layer_sizes&quot;: [
+      256,
+      256
+    ],
+    &quot;max_grad_norm&quot;: 1.0,
+    &quot;num_timesteps&quot;: 5000000
+  },
+  &quot;notes&quot;: &quot;Code-derived selected defaults; command not run. Unresolved Brax defaults null. Brax batch_size not SB3 minibatch size.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/config/manipulation_params.py#L24-L110">源码证据 1 ↗</a><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/learning/train_jax_ppo.py#L186-L249">源码证据 2 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-18" data-search="pandaopencabinet (rss2025) br_cabinet br_cabinet brax"><td>PandaOpenCabinet (RSS2025)<small>br_cabinet</small></td><td>2,048</td><td>10</td><td>40,000,000</td><td>0.001</td><td>0.97</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-18">展开</button></td></tr><tr class="config-detail" id="config-detail-18" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;brax&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;cd rss2025 &amp;&amp; python learning/train_jax_ppo.py --env_name=PandaOpenCabinet&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: null,
+  &quot;status&quot;: &quot;partial&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;normalize_observations&quot;: true,
+    &quot;action_repeat&quot;: 1,
+    &quot;discounting&quot;: 0.97,
+    &quot;unroll_length&quot;: 10,
+    &quot;num_updates_per_batch&quot;: 8,
+    &quot;seed&quot;: 1,
+    &quot;gae_lambda&quot;: null,
+    &quot;clipping_epsilon&quot;: null,
+    &quot;value_hidden_layer_sizes&quot;: [
+      256,
+      256,
+      256,
+      256,
+      256
+    ],
+    &quot;value_obs_key&quot;: &quot;state&quot;,
+    &quot;policy_obs_key&quot;: &quot;state&quot;,
+    &quot;num_envs&quot;: 2048,
+    &quot;num_minibatches&quot;: 32,
+    &quot;batch_size&quot;: 512,
+    &quot;learning_rate&quot;: 0.001,
+    &quot;entropy_cost&quot;: 0.02,
+    &quot;reward_scaling&quot;: 1.0,
+    &quot;policy_hidden_layer_sizes&quot;: [
+      32,
+      32,
+      32,
+      32
+    ],
+    &quot;num_timesteps&quot;: 40000000
+  },
+  &quot;notes&quot;: &quot;Code-derived selected defaults; command not run. Unresolved Brax defaults null. Brax batch_size not SB3 minibatch size.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/config/manipulation_params.py#L24-L110">源码证据 1 ↗</a><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/learning/train_jax_ppo.py#L186-L249">源码证据 2 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-19" data-search="pandapickcubecartesian (rss2025) br_pick_vision br_pick_vision brax"><td>PandaPickCubeCartesian (RSS2025)<small>br_pick_vision</small></td><td>1,024</td><td>10</td><td>10,000,000</td><td>0.001</td><td>0.97</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-19">展开</button></td></tr><tr class="config-detail" id="config-detail-19" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;brax&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;cd rss2025 &amp;&amp; python learning/train_jax_ppo.py --env_name=PandaPickCubeCartesian --vision&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: null,
+  &quot;status&quot;: &quot;partial&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;normalize_observations&quot;: false,
+    &quot;action_repeat&quot;: 1,
+    &quot;discounting&quot;: 0.97,
+    &quot;unroll_length&quot;: 10,
+    &quot;num_updates_per_batch&quot;: 8,
+    &quot;seed&quot;: 1,
+    &quot;gae_lambda&quot;: null,
+    &quot;clipping_epsilon&quot;: 0.3,
+    &quot;value_hidden_layer_sizes&quot;: [
+      128,
+      128,
+      128
+    ],
+    &quot;value_obs_key&quot;: &quot;state&quot;,
+    &quot;policy_obs_key&quot;: &quot;state&quot;,
+    &quot;num_envs&quot;: 1024,
+    &quot;num_minibatches&quot;: 8,
+    &quot;batch_size&quot;: 256,
+    &quot;learning_rate&quot;: 0.001,
+    &quot;entropy_cost&quot;: 0.01,
+    &quot;reward_scaling&quot;: 1.0,
+    &quot;policy_hidden_layer_sizes&quot;: [
+      128,
+      128,
+      128
+    ],
+    &quot;cnn_output_channels&quot;: [
+      16,
+      32
+    ],
+    &quot;num_timesteps&quot;: 10000000
+  },
+  &quot;notes&quot;: &quot;Code-derived selected defaults; command not run. Unresolved Brax defaults null. Brax batch_size not SB3 minibatch size.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/config/manipulation_params.py#L177-L226">源码证据 1 ↗</a><a href="https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/learning/train_jax_ppo.py#L186-L249">源码证据 2 ↗</a></div></td></tr><tr class="config-row" data-detail="config-detail-20" data-search="shadowhandover br_bidex_ppo br_bidex_ppo bidexhands_custom_ppo"><td>ShadowHandOver<small>br_bidex_ppo</small></td><td>128</td><td>8</td><td>6,656,000</td><td>0.0003</td><td>0.96</td><td><button type="button" class="config-toggle" aria-expanded="false" aria-controls="config-detail-20">展开</button></td></tr><tr class="config-detail" id="config-detail-20" hidden><td colspan="7"><strong>入口与完整参数</strong><pre><code>{
+  &quot;trainer&quot;: &quot;bidexhands_custom_ppo&quot;,
+  &quot;entrypoint_unexecuted&quot;: &quot;cd bidexhands &amp;&amp; python train.py --task=ShadowHandOver --algo=ppo --seed=42 --headless&quot;,
+  &quot;config_chain&quot;: null,
+  &quot;source_revision&quot;: &quot;dc41afd134cebfe4d80a5b861f0b8c15d734320a&quot;,
+  &quot;status&quot;: &quot;verified-from-code&quot;,
+  &quot;hyperparameters&quot;: {
+    &quot;num_envs&quot;: 128,
+    &quot;rollout_steps&quot;: 8,
+    &quot;max_iterations&quot;: 6500,
+    &quot;total_timesteps&quot;: 6656000,
+    &quot;batch_size&quot;: 1024,
+    &quot;minibatch_size&quot;: 256,
+    &quot;num_minibatches&quot;: 4,
+    &quot;update_epochs&quot;: 5,
+    &quot;learning_rate&quot;: 0.0003,
+    &quot;schedule&quot;: &quot;adaptive&quot;,
+    &quot;desired_kl&quot;: 0.016,
+    &quot;gamma&quot;: 0.96,
+    &quot;gae_lambda&quot;: 0.95,
+    &quot;clip_range&quot;: 0.2,
+    &quot;entropy_coef&quot;: 0,
+    &quot;value_loss_coef&quot;: 2.0,
+    &quot;use_clipped_value_loss&quot;: false,
+    &quot;max_grad_norm&quot;: 1,
+    &quot;configured_init_noise_std&quot;: 0.8,
+    &quot;actor_layers&quot;: [
+      1024,
+      1024,
+      512
+    ],
+    &quot;critic_layers&quot;: [
+      1024,
+      1024,
+      512
+    ],
+    &quot;activation&quot;: &quot;elu&quot;,
+    &quot;actor_obs&quot;: &quot;full_state398&quot;,
+    &quot;critic_obs&quot;: &quot;full_state398&quot;,
+    &quot;seed&quot;: 42,
+    &quot;seed_behavior&quot;: &quot;random0..9999 unless --seed provided; deterministic option42&quot;,
+    &quot;control_hz&quot;: 60,
+    &quot;episode_steps&quot;: 75,
+    &quot;observation_clip&quot;: 5,
+    &quot;action_clip&quot;: 1,
+    &quot;advantage_normalization&quot;: true,
+    &quot;reward_dt_scaling&quot;: false,
+    &quot;default_seed&quot;: -1
+  },
+  &quot;notes&quot;: &quot;Command explicit seed42 overrides default-1; training not executed. total_timesteps calculated128*8*6500 excluding reset initialization step. actual Gaussian scale_tril initialized .8²=.64, not .8.&quot;
+}</code></pre><div class="evidence-links"><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/cfg/ppo/config.yaml#L1-L35">源码证据 1 ↗</a><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/cfg/ShadowHandOver.yaml#L1-L47">源码证据 2 ↗</a><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/utils/config.py#L62-L102">源码证据 3 ↗</a><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/algorithms/rl/ppo/ppo.py#L44-L78">源码证据 4 ↗</a><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/algorithms/rl/ppo/ppo.py#L119-L164">源码证据 5 ↗</a><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/algorithms/rl/ppo/module.py#L20-L104">源码证据 6 ↗</a><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/tasks/hand_base/vec_task.py#L121-L139">源码证据 7 ↗</a><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/utils/config.py#L181-L215">源码证据 8 ↗</a><a href="https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/bidexhands/algorithms/rl/ppo/storage.py#L50-L86">源码证据 9 ↗</a></div></td></tr></tbody></table></div>
+  <p id="config-count" class="caption" aria-live="polite"></p>
+  <div class="note"><strong>SO101 教程：每个 PPO 训练段 10.24M 步</strong><p>公开教程覆盖为 64 环境 × 32 步 × 5000 轮。Teacher 与视觉 PPO 各有一个这样的训练段；模仿预热 614,400 交互步另计。此前 teacher 20.48M 的估算混用了入口默认值，已在<a href="reference/04_training_configs.html">配置链核对</a>中明确更正。</p></div>
+  <div class="calculator"><div><h3>并行数与采样轮数</h3><p>固定总环境步数时，增加并行数会减少采样轮数。吞吐能否提升需要测量。以下按 SB3 的完整 rollout 向下对齐，仅做算术估算。</p><p class="caption">Brax、RL-Games 等实现的 batch 约定需按各自代码解释。</p></div><div><div class="calc-inputs"><label>总环境步数<input id="calc-total" type="number" min="1" max="100000000000" value="2000000"></label><label>并行环境<input id="calc-envs" type="number" min="1" max="65536" value="8"></label><label>每环境采样步<input id="calc-steps" type="number" min="1" max="65536" value="128"></label></div><output id="calc-output" aria-live="polite"></output></div></div>
+</section>
+<section id="reading">
+  <div class="section-heading"><span class="section-number">06</span><div><p class="eyebrow">完整技术附录</p><h2>需要细节时，从这里深入</h2></div></div>
+  <div class="chapter-list"><a class="chapter-link" href="reference/00_executive_summary.html"><strong>01 · 结论与优先级</strong><span>SO101、StackCube 与 Factory 分别值得借鉴什么</span></a><a class="chapter-link" href="reference/01_ecosystem.html"><strong>02 · 项目生态</strong><span>任务套件、仿真平台与 PPO 算法库的角色</span></a><a class="chapter-link" href="reference/02_task_taxonomy.html"><strong>03 · 任务索引</strong><span>按物理环节寻找控制接口、成功和终止条件</span></a><a class="chapter-link" href="reference/03_reward_patterns.html"><strong>04 · 奖励设计</strong><span>分段覆盖、事件进度、高水位与势函数</span></a><a class="chapter-link" href="reference/04_training_configs.html"><strong>05 · 训练配置</strong><span>实际入口、参数覆盖与并行预算</span></a><a class="chapter-link" href="reference/05_recommendations.html"><strong>06 · OrcaGym 复用方案</strong><span>候选干预的证据条件与证伪方式</span></a><a class="chapter-link" href="reference/06_gaps.html"><strong>07 · 覆盖与缺口</strong><span>静态源码调查的边界和配置冲突</span></a></div>
+  <details><summary>全部分卷与源码任务卡</summary><div class="reference-index"><a href="reference/parts/breadth/discovery_and_gaps.html">搜索与边界（2026-11-16） <span class="muted">(parts/breadth)</span></a><a href="reference/parts/breadth/notes.html">扩展任务源码调研结论 <span class="muted">(parts/breadth)</span></a><a href="reference/parts/breadth/targeted_pass.html">双手与移动操作补充检索 <span class="muted">(parts/breadth)</span></a><a href="reference/parts/breadth/task_cards/bidexhands__ShadowHandOver.html">ShadowHandOver：双手传递的实际验收与 PPO 配置 <span class="muted">(parts/breadth/task_cards)</span></a><a href="reference/parts/breadth/task_cards/metaworld__button-press-v3.html">button-press-v3 / reward v2 <span class="muted">(parts/breadth/task_cards)</span></a><a href="reference/parts/breadth/task_cards/playground__PandaOpenCabinet.html">PandaOpenCabinet (RSS2025) <span class="muted">(parts/breadth/task_cards)</span></a><a href="reference/parts/breadth/task_cards/playground__PandaPickCubeCartesian.html">PandaPickCubeCartesian (RSS2025) <span class="muted">(parts/breadth/task_cards)</span></a><a href="reference/parts/breadth/task_cards/robosuite__Stack.html">Stack, reward_shaping=True explicit variant <span class="muted">(parts/breadth/task_cards)</span></a><a href="reference/parts/isaac/00_executive_summary.html">Isaac 系操作PPO分册：优先复用什么 <span class="muted">(parts/isaac)</span></a><a href="reference/parts/isaac/01_ecosystem.html">项目与版本 <span class="muted">(parts/isaac)</span></a><a href="reference/parts/isaac/02_task_taxonomy.html">已核查任务卡 <span class="muted">(parts/isaac)</span></a><a href="reference/parts/isaac/03_reward_patterns.html">有源码依据的奖励模式 <span class="muted">(parts/isaac)</span></a><a href="reference/parts/isaac/04_training_configs.html">有效训练配置与预算口径 <span class="muted">(parts/isaac)</span></a><a href="reference/parts/isaac/05_recommendations.html">对现有X5研究的复用边界 <span class="muted">(parts/isaac)</span></a><a href="reference/parts/isaac/06_gaps.html">覆盖与未验证项 <span class="muted">(parts/isaac)</span></a><a href="reference/parts/isaac/task_cards/isaacgym_stack.html">IsaacGymEnvs FrankaCubeStack：完成奖励替换密集奖励 <span class="muted">(parts/isaac/task_cards)</span></a><a href="reference/parts/isaac/task_cards/isaaclab_cabinet.html">Isaac Lab Cabinet：持续几何奖励，开启即终止 <span class="muted">(parts/isaac/task_cards)</span></a><a href="reference/parts/isaac/task_cards/isaaclab_factory.html">Isaac Lab Factory PegInsert：多尺度几何、非对称Critic、循环PPO <span class="muted">(parts/isaac/task_cards)</span></a><a href="reference/parts/isaac/task_cards/isaaclab_lift.html">Isaac Lab Lift：条件门控，但没有显式阶段状态机 <span class="muted">(parts/isaac/task_cards)</span></a><a href="reference/parts/isaac/task_cards/isaaclab_stack_negative.html">负例：Isaac Lab Stack 不等于官方调好的PPO <span class="muted">(parts/isaac/task_cards)</span></a><a href="reference/parts/isaac/task_cards/so101_typing.html">NVIDIA SO101 typing：最接近按钮的三阶段单Actor PPO <span class="muted">(parts/isaac/task_cards)</span></a><a href="reference/parts/maniskill/00_executive_summary.html">ManiSkill 源码取证摘要 <span class="muted">(parts/maniskill)</span></a><a href="reference/parts/maniskill/01_ecosystem.html">项目角色与版本 <span class="muted">(parts/maniskill)</span></a><a href="reference/parts/maniskill/02_task_taxonomy.html">任务类型与详细卡 <span class="muted">(parts/maniskill)</span></a><a href="reference/parts/maniskill/03_reward_patterns.html">可复用奖励模式 <span class="muted">(parts/maniskill)</span></a><a href="reference/parts/maniskill/04_training_configs.html">有效 PPO 配置对照 <span class="muted">(parts/maniskill)</span></a><a href="reference/parts/maniskill/05_recommendations.html">对 X5/OrcaGym 的复用建议（未执行干预） <span class="muted">(parts/maniskill)</span></a><a href="reference/parts/maniskill/06_gaps.html">搜索范围、负例与空白 <span class="muted">(parts/maniskill)</span></a><a href="reference/parts/maniskill/task_cards/AssemblingKits-v1.html">ManiSkill：AssemblingKits-v1 <span class="muted">(parts/maniskill/task_cards)</span></a><a href="reference/parts/maniskill/task_cards/OpenCabinetDrawer-v1.html">ManiSkill：OpenCabinetDrawer-v1 <span class="muted">(parts/maniskill/task_cards)</span></a><a href="reference/parts/maniskill/task_cards/PegInsertionSide-v1.html">ManiSkill：PegInsertionSide-v1 <span class="muted">(parts/maniskill/task_cards)</span></a><a href="reference/parts/maniskill/task_cards/PickCube-v1.html">ManiSkill：PickCube-v1 <span class="muted">(parts/maniskill/task_cards)</span></a><a href="reference/parts/maniskill/task_cards/StackCube-v1.html">ManiSkill：StackCube-v1 <span class="muted">(parts/maniskill/task_cards)</span></a><a href="reference/parts/maniskill/task_cards/TurnFaucet-v1.html">ManiSkill：TurnFaucet-v1 <span class="muted">(parts/maniskill/task_cards)</span></a><a href="reference/parts/maniskill/task_cards/TwoRobotStackCube-v1.html">ManiSkill：TwoRobotStackCube-v1 <span class="muted">(parts/maniskill/task_cards)</span></a></div></details>
+  <div class="note"><strong>证据范围</strong><p>本手册基于 2026-11-16 的固定版本源码调查。部分任务只有环境，没有已核验的任务专属 PPO 配置；未运行上游训练。性能、显存和收敛时长缺乏可比日志时仍为未知。<a href="reference/06_gaps.html">查看覆盖与缺口</a>，或下载<a href="data/evidence.jsonl">源码证据账本</a>。</p></div>
+</section>
+<footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>

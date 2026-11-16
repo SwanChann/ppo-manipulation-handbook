@@ -1,0 +1,10 @@
+Counts: repositories=15, tasks=19, rewards=43, configs=21, evidence=154, verified_tasks=14, repos_with_revision=9
+WARNING: repo gymrobotics: no pinned revision
+WARNING: repo robocasa: no pinned revision
+WARNING: repo sb3: no pinned revision
+WARNING: repo rslrl: no pinned revision
+WARNING: repo skrl: no pinned revision
+WARNING: repo cleanrl: no pinned revision
+WARNING: task maniskill__TurnFaucet-v1: repo has tested PPO but this task has no task-specific verified config
+WARNING: task maniskill__AssemblingKits-v1: repo has tested PPO but this task has no task-specific verified config
+Validation: 0 errors, 8 warnings

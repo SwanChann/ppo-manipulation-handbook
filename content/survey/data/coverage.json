@@ -1,0 +1,12 @@
+{
+  "candidate_repositories_screened": 15,
+  "code_inspected_repositories": 8,
+  "task_records": 19,
+  "reward_inspected_tasks": 17,
+  "tasks_with_task_specific_config": 14,
+  "config_rows": 21,
+  "evidence_rows": 154,
+  "performance_reproductions": 0,
+  "tasks_with_verified_from_code_config": 12,
+  "tasks_with_partial_config_only": 2
+}

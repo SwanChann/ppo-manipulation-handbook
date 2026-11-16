@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>可复用奖励设计及其适用条件 · 操作 PPO 手册</title><link rel="icon" href="../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../assets/style.css"><script src="../assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="../index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="../index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="../index.html#stages"><b>02</b>阶段策略示意</a><a href="../index.html#tasks"><b>03</b>源码任务索引</a><a href="../index.html#rewards"><b>04</b>奖励设计机制</a><a href="../index.html#configs"><b>05</b>训练配置对照</a><a href="../index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="../reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="../index.html">操作 PPO 源码手册</a><a href="../index.html#reading">目录 ↓</a></header><main id="main" class="main article-shell"><div class="article-header"><a href="../index.html#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div><article class="prose"><h1>可复用奖励设计及其适用条件</h1><nav class="article-toc" aria-label="本页目录"><ul><li><a href="#section-1">当前物理条件的分段覆盖</a></li><li><a href="#section-2">接触前先做几何门控</a></li><li><a href="#section-3">历史事件、阶段与一次性进度</a></li><li><a href="#section-4">历史最高分与势函数差分</a></li><li><a href="#section-5">时间尺度和独立验收</a></li></ul></nav>
+<p>奖励按何种条件激活，与Actor能否看到这个条件，是两个独立问题。下列公式来自任务卡指向的固定源码；布尔指示记作I，距离使用各任务代码中的单位。跨项目复制权重前必须确认归一化、控制周期与终止语义。</p>
+<h2 id="section-1">当前物理条件的分段覆盖</h2>
+<p><a href="parts/maniskill/task_cards/StackCube-v1.html">ManiSkill StackCube</a>依次覆盖同一个reward变量，而非把前后阶段全相加：</p>
+<pre><code class="language-text">r = 2(1 − tanh(5 d_tcp,A))
+if grasped: r = 4 + 1 − tanh(5 d_A,goal)
+if on_top:  r = 6 + (ungrasp + 1 − tanh(10||v_A|| + ||ω_A||))/2
+if success: r = 8
+r_normalized = r/8
+</code></pre>
+<p>抓住后目标变为放置，叠好后目标变为松手和物块停稳；前段接近项被覆盖。当前物理状态可以回退，代码未锁存FSM。对按钮，首次按下后又释放属于不同历史，单看当前位置不能区分“尚未按过”，因此仍需保留事件记忆。</p>
+<p>这是适合本项目参考的“目标切换”写法，但该式基座4/6会形成分段跳变。不能将其说成势函数差分，或保证任何初始化下更容易学习。检验方式是在同一独立验收下观察切换前后动作方向与阶段驻留，而不是只比较Return。</p>
+<h2 id="section-2">接触前先做几何门控</h2>
+<p><a href="parts/maniskill/task_cards/PegInsertionSide-v1.html">ManiSkill PegInsertionSide</a>中，G为当前抓住，d_h/d_c为销头/销中心相对于孔轴的横向误差：</p>
+<pre><code class="language-text">r = [1 − tanh(4 d_tail) + G
+     + 3G(1 − tanh(0.5(d_h+d_c)+4.5 max(d_h,d_c)))
+     + 5G I(d_h&lt;0.01 ∧ d_c&lt;0.01)(1 − tanh(5||head_in_hole||))]/10
+</code></pre>
+<p>成功时覆盖为1。双点误差隐含姿态对齐；不是仅让一个末端点靠近目标。接近项仍持续相加，所以这与StackCube的互斥覆盖不同。对本地按钮可复用“法向、横向对齐后才强奖励深入”的结构，但只有证据表明当前瓶颈是对齐时才实施。</p>
+<p><a href="parts/isaac/task_cards/isaaclab_factory.html">Factory PegInsert</a>采用同时启用的多尺度关键点项。令d为关键点平均距离，S(a,b,d)=1/(exp(−ad)+b+exp(ad))，则r=S(5,4,d)+S(50,2,d)+S(100,0,d)+I_engaged+I_success。粗尺度提供远处梯度、细尺度区分末端误差；它依赖局部已抓取初态，不能替代完整流程。</p>
+<h2 id="section-3">历史事件、阶段与一次性进度</h2>
+<p><a href="parts/isaac/task_cards/so101_typing.html">SO101 P0</a>有SEEK_PRESS、RELEASE_KEY、CLEARANCE三个事件状态。Actor与Critic均包含one-hot；切换步令进度为零，按下后关闭seek进度。事件阈值使用真实按键关节行程，历史按键完成状态不会随释放清除。</p>
+<p>其signed progress形如clip((d_previous−d_current)/scale,−1,1)，只在同目标同阶段计算；事件额外发放一次性奖励。对于本地任务，这对应“向目标推进”与“有效按下发生”的分离。详细有效系数与上游timeout配置的执行差异，以SO101任务卡为准，不能仅复制配置里的weight。</p>
+<h2 id="section-4">历史最高分与势函数差分</h2>
+<p><a href="parts/breadth/task_cards/playground__PandaPickCubeCartesian.html">Playground PickCartesian</a>定义当前综合分数S_t与回合历史最高分M，使用r_t=max(S_t−M_(t−1),0)，M_t=max(M_(t−1),S_t)。在同一回合内重复进退不能反复领取同一高度的正进度，但回退本身不扣分。该任务还含引导初态，不能把学习效率全部归因于奖励。</p>
+<p>一般势函数塑形为F(s,s′)=γΦ(s′)−Φ(s)。若Φ=−D，则F=D(s)−γD(s′)；它与普通D(s)−D(s′)不同。策略不变性需要相同折扣、完整状态以及相容的终止边界处理。理论依据为<a href="https://people.eecs.berkeley.edu/~pabbeel/cs287-fa09/readings/NgHaradaRussell-shaping-ICML1999.pdf">Ng、Harada、Russell的原论文</a>。这里只解释数学差别；本地v6的切换步清零、门控signed progress和高水位算法均不能直接宣称满足该保证。</p>
+<p>选择建议：若要对退步直接扣分，signed progress比高水位更直接；若要压制往返刷正分，高水位提供一种候选。是否有奖励利用行为必须由轨迹验证，不能只靠公式猜测给现有失败归因。</p>
+<h2 id="section-5">时间尺度和独立验收</h2>
+<p>Isaac Lab manager路径将weight×term再乘control_dt，Direct任务不会自动套同样规则，详见<a href="parts/isaac/task_cards/isaaclab_lift.html">Lab Lift</a>和<a href="parts/isaac/task_cards/isaaclab_factory.html">Factory</a>。把manager权重原封不动移到每步求和环境会改变实际量级。一次性事件若经过dt缩放，也必须按有效结果比较。</p>
+<p>需要保留的反例包括：抽屉开足却未停稳时已经拿到满奖励；双臂Stack奖励右臂让位，但success没有验收让位；Bi-DexHands成功指标与bonus触发条件不同。它们分别由<a href="parts/maniskill/task_cards/OpenCabinetDrawer-v1.html">Drawer</a>、<a href="parts/maniskill/task_cards/TwoRobotStackCube-v1.html">双臂Stack</a>、<a href="parts/breadth/task_cards/bidexhands__ShadowHandOver.html">ShadowHandOver</a>源码支持，属于静态语义差异，不是本轮已执行的reward hacking实验。</p>
+<p>本地验收继续独立检查真实按压、连续保持、释放、20mm撤离、返回完整初态、速度与150ms连续停稳，数值来自冻结任务配置（本地实验附件，未随手册公开）及其base_task_config。阶段编号不直接判成功；一直压住、重复按压和不按直接返回不能因reward高而通过。</p>
+</article><footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>
