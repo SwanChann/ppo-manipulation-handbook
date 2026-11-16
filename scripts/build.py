@@ -13,6 +13,7 @@ CONTENT = ROOT / 'content'
 SITE = ROOT / 'site'
 SOURCE = CONTENT / 'survey'
 MD = MarkdownIt('commonmark', {'html': False}).enable('table')
+MEDIA = json.loads((CONTENT / 'task_media.json').read_text())
 REPO = 'https://github.com/SwanChann/ppo-manipulation-handbook'
 CHAPTERS = [
     ('00_executive_summary', '结论与优先级', 'SO101、StackCube 与 Factory 分别值得借鉴什么'),
@@ -69,6 +70,18 @@ def title(t):
     if tid == 'so101__TutorialRandom13': return 'SO101 按键 · 公开视觉教程'
     return t['name'].replace('Isaac-', '').replace(' / single-agent PPO / egg full_state', '').replace(' (negative PPO baseline example)', ' · PPO 负例')
 
+def task_figure(key, dest, compact=False):
+    media = MEDIA[key]
+    root = os.path.relpath(SITE, dest.parent).replace(os.sep, '/')
+    prefix = '' if root == '.' else root + '/'
+    images = []
+    for item in media['images']:
+        src = prefix + 'assets/tasks/' + item['file']
+        images.append(f'<div class="sim-frame"><a href="{esc(src)}" target="_blank" rel="noopener" aria-label="查看大图：{esc(item["alt"])}"><img src="{esc(src)}" alt="{esc(item["alt"])}" width="{item["width"]}" height="{item["height"]}" loading="lazy" decoding="async"></a><span>{esc(item["label"])}</span></div>')
+    source_links = ''.join(f'<a href="{esc(u)}">{esc(label)} ↗</a>' for label,u in media['sources'])
+    mode = 'compact' if compact else 'full'
+    return f'<figure class="task-figure {mode}" data-task-media="{esc(key)}"><div class="sim-frames frames-{len(images)}">{"".join(images)}</div><figcaption><strong>{esc(media["caption"])}</strong><span class="media-context">{esc(media["context"])}</span><span class="media-credit">画面：{esc(media["credit"])} · {source_links}<a href="{prefix}media-sources.html#{esc(key)}">图源说明</a></span></figcaption></figure>'
+
 def shell(content, page_title, dest, article=False):
     root = os.path.relpath(SITE, dest.parent).replace(os.sep, '/')
     prefix = '' if root == '.' else root + '/'
@@ -124,7 +137,8 @@ def render_article(path):
     page_title = heading_match.group(1) if heading_match else path.stem
     header = '<div class="article-header"><a href="' + os.path.relpath(SITE/'index.html', dest.parent).replace(os.sep,'/') + '#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div>'
     table = '<nav class="article-toc" aria-label="本页目录"><ul>' + ''.join(f'<li><a href="#section-{i}">{label}</a></li>' for i,label in toc) + '</ul></nav>' if toc else ''
-    rendered = rendered.replace('</h1>', '</h1>' + table, 1)
+    figure = task_figure(path.stem, dest) if path.parent.name == 'task_cards' and path.stem in MEDIA else ''
+    rendered = rendered.replace('</h1>', '</h1>' + figure + table, 1)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(shell(header + '<article class="prose">' + rendered + '</article>', page_title, dest, article=True))
 
@@ -141,7 +155,8 @@ def main():
         href = f'reference/parts/{part}/task_cards/{key}.html'
         search = ' '.join([label, t['name'], project, family, desc, boundary]).lower()
         status = '源码已核验' if t['status'] == 'verified' else '部分核验'
-        cards.append(f'<article class="card task-card" data-family="{t["family"]}" data-search="{esc(search)}"><div class="task-project">{esc(project)} · {esc(family)}</div><span class="tag">{status}</span><h3>{esc(label)}</h3><p>{esc(desc)}</p><p class="boundary"><strong>验收边界：</strong>{esc(boundary)}</p><a href="{href}">公式、接口与配置 →</a></article>')
+        figure = task_figure(key, SITE/'index.html', compact=True)
+        cards.append(f'<article class="card task-card" data-family="{t["family"]}" data-search="{esc(search)}"><div class="task-project">{esc(project)} · {esc(family)}</div><span class="tag">{status}</span><h3>{esc(label)}</h3>{figure}<p>{esc(desc)}</p><p class="boundary"><strong>验收边界：</strong>{esc(boundary)}</p><a href="{href}">公式、接口与配置 →</a></article>')
     rows = []
     taskmap = {t['id']: t for t in tasks}
     for i,c in enumerate(load('configs')):
@@ -166,6 +181,14 @@ def main():
     (SITE/'index.html').write_text(shell(homepage, '机械臂多阶段强化学习', SITE/'index.html'))
     import shutil
     shutil.copytree(SOURCE/'data', SITE/'data', dirs_exist_ok=True)
+    shutil.copy2(CONTENT/'task_media.json', SITE/'data/task_media.json')
+    shutil.copytree(CONTENT/'media_licenses', SITE/'data/media_licenses', dirs_exist_ok=True)
+    attribution = ['<div class="article-header"><a href="index.html#tasks">← 返回任务导览</a><span>配图来源</span></div><article class="prose"><h1>仿真示例图的来源与使用范围</h1><p>配图说明任务对象与操作目标，包含官方截图、演示提帧、本地静态场景和脚本动作画面。各图注明对应关系，避免把场景示例当作手册配置的策略复现。图片可离线查看；点击原始来源可核对上游素材。</p><p>Playground 使用固定版本 XML 与 MuJoCo Menagerie Panda 资产渲染预设位姿；MetaWorld 使用官方脚本策略执行真实环境动作。它们分别属于场景展示和脚本演示，均不计为 PPO 成绩。</p>']
+    for key,media in MEDIA.items():
+        attribution.append(f'<h2 id="{esc(key)}">{esc(key)}</h2><p>{esc(media["context"])}</p><p>画面作者：{esc(media["credit"])}。来源记录：{esc(media["license"])}。</p><p>' + ' · '.join(f'<a href="{esc(url)}">{esc(label)}</a>' for label,url in media['sources']) + (f' · <a href="{esc(media["license_url"])}">上游许可依据</a>' if media.get('license_url') else '') + '</p>')
+    licenses = ''.join(f'<li><a href="data/media_licenses/{esc(p.name)}">{esc(p.name)}</a></li>' for p in sorted((CONTENT/'media_licenses').glob('*')) if p.is_file())
+    attribution.append('<h2>随文保留的许可文本</h2><ul>' + licenses + '</ul><p>第三方画面归原作者所有。完整图片文件、来源 URL、提帧信息及 SHA256 在 <a href="data/task_media.json">配图清单</a>中。</p></article>')
+    (SITE/'media-sources.html').write_text(shell(''.join(attribution),'仿真配图来源',SITE/'media-sources.html',article=True))
     for path in SOURCE.glob('*.json'):
         shutil.copy2(path, SITE/'reference'/path.name)
     for path in SOURCE.glob('*.txt'):

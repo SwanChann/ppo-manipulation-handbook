@@ -1,0 +1,596 @@
+{
+  "AssemblingKits-v1": {
+    "caption": "抓起异形零件，旋转对齐并放进形状匹配的凹槽。",
+    "context": "官方任务演示的起始与结束帧，用于说明操作对象和目标。",
+    "credit": "ManiSkill contributors",
+    "relationship": "official-task-demonstration",
+    "sources": [
+      [
+        "官方任务页",
+        "https://maniskill.readthedocs.io/en/latest/tasks/table_top_gripper/#assemblingkits-v1"
+      ],
+      [
+        "固定版本图片",
+        "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/AssemblingKits-v1_rt_thumb_last.png"
+      ]
+    ],
+    "license": "Apache-2.0 repository; underlying robot/object assets retain their own terms",
+    "images": [
+      {
+        "file": "AssemblingKits-v1_rt_thumb_first.png",
+        "width": 256,
+        "height": 256,
+        "alt": "抓起异形零件，旋转对齐并放进形状匹配的凹槽。官方示例起始帧",
+        "label": "开始",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/AssemblingKits-v1_rt_thumb_first.png",
+        "sha256": "1ec154632cbb32e661c3f6436c5ec3aad92dd38654078ace1d3b712675a4d46f"
+      },
+      {
+        "file": "AssemblingKits-v1_rt_thumb_last.png",
+        "width": 256,
+        "height": 256,
+        "alt": "抓起异形零件，旋转对齐并放进形状匹配的凹槽。官方示例结束帧",
+        "label": "示例结束",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/AssemblingKits-v1_rt_thumb_last.png",
+        "sha256": "9404b6c45fcfe2caf99c4dedaaab4fab23213419924a1dbadea6acb9c39f8d9e"
+      }
+    ]
+  },
+  "PegInsertionSide-v1": {
+    "caption": "抓住长销，对准方孔的轴线后从侧面插入。",
+    "context": "官方任务演示的起始与结束帧，用于说明操作对象和目标。",
+    "credit": "ManiSkill contributors",
+    "relationship": "official-task-demonstration",
+    "sources": [
+      [
+        "官方任务页",
+        "https://maniskill.readthedocs.io/en/latest/tasks/table_top_gripper/#peginsertionside-v1"
+      ],
+      [
+        "固定版本图片",
+        "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/PegInsertionSide-v1_rt_thumb_last.png"
+      ]
+    ],
+    "license": "Apache-2.0 repository; underlying robot/object assets retain their own terms",
+    "images": [
+      {
+        "file": "PegInsertionSide-v1_rt_thumb_first.png",
+        "width": 256,
+        "height": 256,
+        "alt": "抓住长销，对准方孔的轴线后从侧面插入。官方示例起始帧",
+        "label": "开始",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/PegInsertionSide-v1_rt_thumb_first.png",
+        "sha256": "e53858749065f1222a89e5d9d4cc4ef9a4fff66dfecbf94da80ecc6d6f2114af"
+      },
+      {
+        "file": "PegInsertionSide-v1_rt_thumb_last.png",
+        "width": 256,
+        "height": 256,
+        "alt": "抓住长销，对准方孔的轴线后从侧面插入。官方示例结束帧",
+        "label": "示例结束",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/PegInsertionSide-v1_rt_thumb_last.png",
+        "sha256": "ade5fb18fdd23b5309cc546179937cba401f358a7267b11024dd104d2c1a6bcf"
+      }
+    ]
+  },
+  "PickCube-v1": {
+    "caption": "夹爪抓起桌上的方块，将它搬到悬空目标附近。",
+    "context": "官方任务演示的起始与结束帧，用于说明操作对象和目标。",
+    "credit": "ManiSkill contributors",
+    "relationship": "official-task-demonstration",
+    "sources": [
+      [
+        "官方任务页",
+        "https://maniskill.readthedocs.io/en/latest/tasks/table_top_gripper/#pickcube-v1"
+      ],
+      [
+        "固定版本图片",
+        "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/PickCube-v1_rt_thumb_last.png"
+      ]
+    ],
+    "license": "Apache-2.0 repository; underlying robot/object assets retain their own terms",
+    "images": [
+      {
+        "file": "PickCube-v1_rt_thumb_first.png",
+        "width": 256,
+        "height": 256,
+        "alt": "夹爪抓起桌上的方块，将它搬到悬空目标附近。官方示例起始帧",
+        "label": "开始",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/PickCube-v1_rt_thumb_first.png",
+        "sha256": "6555f66b3806e38299144d0659c988126dea52c51dceef85ef813d4b5eddb5e5"
+      },
+      {
+        "file": "PickCube-v1_rt_thumb_last.png",
+        "width": 256,
+        "height": 256,
+        "alt": "夹爪抓起桌上的方块，将它搬到悬空目标附近。官方示例结束帧",
+        "label": "示例结束",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/PickCube-v1_rt_thumb_last.png",
+        "sha256": "9be325bb3a7c9eeb3b9c3c7bd060ba806f49be517138387fffa282a4c9c5bb79"
+      }
+    ]
+  },
+  "StackCube-v1": {
+    "caption": "抓起红色方块，放到绿色方块上并松开夹爪。",
+    "context": "官方任务演示的起始与结束帧，用于说明操作对象和目标。",
+    "credit": "ManiSkill contributors",
+    "relationship": "official-task-demonstration",
+    "sources": [
+      [
+        "官方任务页",
+        "https://maniskill.readthedocs.io/en/latest/tasks/table_top_gripper/#stackcube-v1"
+      ],
+      [
+        "固定版本图片",
+        "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/StackCube-v1_rt_thumb_last.png"
+      ]
+    ],
+    "license": "Apache-2.0 repository; underlying robot/object assets retain their own terms",
+    "images": [
+      {
+        "file": "StackCube-v1_rt_thumb_first.png",
+        "width": 256,
+        "height": 256,
+        "alt": "抓起红色方块，放到绿色方块上并松开夹爪。官方示例起始帧",
+        "label": "开始",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/StackCube-v1_rt_thumb_first.png",
+        "sha256": "66d1169378a504a126025382d5bf3963b889756b34e252da8d8d67338b02cf2f"
+      },
+      {
+        "file": "StackCube-v1_rt_thumb_last.png",
+        "width": 256,
+        "height": 256,
+        "alt": "抓起红色方块，放到绿色方块上并松开夹爪。官方示例结束帧",
+        "label": "示例结束",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/StackCube-v1_rt_thumb_last.png",
+        "sha256": "83a3a8f59b84bb08964e099f9f75b653cfaba376cc5b9e37bc2433322ecdde4e"
+      }
+    ]
+  },
+  "TwoRobotStackCube-v1": {
+    "caption": "两只机械臂协作移动方块，在目标区域完成叠放。",
+    "context": "官方任务演示的起始与结束帧，用于说明操作对象和目标。",
+    "credit": "ManiSkill contributors",
+    "relationship": "official-task-demonstration",
+    "sources": [
+      [
+        "官方任务页",
+        "https://maniskill.readthedocs.io/en/latest/tasks/table_top_gripper/#tworobotstackcube-v1"
+      ],
+      [
+        "固定版本图片",
+        "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/TwoRobotStackCube-v1_rt_thumb_last.png"
+      ]
+    ],
+    "license": "Apache-2.0 repository; underlying robot/object assets retain their own terms",
+    "images": [
+      {
+        "file": "TwoRobotStackCube-v1_rt_thumb_first.png",
+        "width": 256,
+        "height": 256,
+        "alt": "两只机械臂协作移动方块，在目标区域完成叠放。官方示例起始帧",
+        "label": "开始",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/TwoRobotStackCube-v1_rt_thumb_first.png",
+        "sha256": "7cd9a45259ff97e9807591cb01b95a33960eb86caa133d497523e7b5a6c21988"
+      },
+      {
+        "file": "TwoRobotStackCube-v1_rt_thumb_last.png",
+        "width": 256,
+        "height": 256,
+        "alt": "两只机械臂协作移动方块，在目标区域完成叠放。官方示例结束帧",
+        "label": "示例结束",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/TwoRobotStackCube-v1_rt_thumb_last.png",
+        "sha256": "4395ffe4e0c636e40ac51be1267dee4bde4abdce2dfe0706674fc911c9a79f80"
+      }
+    ]
+  },
+  "OpenCabinetDrawer-v1": {
+    "caption": "移动机械臂接近柜子，抓住把手并向外拉开抽屉。",
+    "context": "官方任务演示的起始与结束帧，用于说明操作对象和目标。",
+    "credit": "ManiSkill contributors",
+    "relationship": "official-task-demonstration",
+    "sources": [
+      [
+        "官方任务页",
+        "https://maniskill.readthedocs.io/en/latest/tasks/mobile_manipulation/#opencabinetdrawer-v1"
+      ],
+      [
+        "固定版本图片",
+        "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/OpenCabinetDrawer-v1_rt_thumb_last.png"
+      ]
+    ],
+    "license": "Apache-2.0 repository; underlying robot/object assets retain their own terms",
+    "images": [
+      {
+        "file": "OpenCabinetDrawer-v1_rt_thumb_first.png",
+        "width": 256,
+        "height": 256,
+        "alt": "移动机械臂接近柜子，抓住把手并向外拉开抽屉。官方示例起始帧",
+        "label": "开始",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/OpenCabinetDrawer-v1_rt_thumb_first.png",
+        "sha256": "2297f1db429fa4d1f2ac5cea4d751e0c178e40572cd5a72831623352c85f688f"
+      },
+      {
+        "file": "OpenCabinetDrawer-v1_rt_thumb_last.png",
+        "width": 256,
+        "height": 256,
+        "alt": "移动机械臂接近柜子，抓住把手并向外拉开抽屉。官方示例结束帧",
+        "label": "示例结束",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/_static/env_thumbnails/OpenCabinetDrawer-v1_rt_thumb_last.png",
+        "sha256": "4f99b740233cd71acc5b712ef7c6f194ed935b5e41263d4ea59bef5a82d7c71e"
+      }
+    ]
+  },
+  "TurnFaucet-v1": {
+    "caption": "用夹爪拨动水龙头把手，将其转过目标角度。",
+    "context": "ManiSkill 官方保留的 TurnFaucet-v0 仿真演示，作为同类任务示例；正文分析的是 v1，具体模型和验收以正文为准。",
+    "credit": "ManiSkill contributors",
+    "relationship": "official-predecessor-task-demonstration",
+    "sources": [
+      [
+        "官方原始演示",
+        "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/user_guide/concepts/thumbnails/TurnFaucet-v0.gif"
+      ]
+    ],
+    "license": "Apache-2.0 repository; underlying PartNet-Mobility objects retain their own terms",
+    "images": [
+      {
+        "file": "TurnFaucet-v0-frame-0.png",
+        "width": 256,
+        "height": 256,
+        "label": "接近把手",
+        "alt": "Panda 机械臂拨动水龙头把手，改变其关节角度。",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/user_guide/concepts/thumbnails/TurnFaucet-v0.gif",
+        "frame_index": 0,
+        "sha256": "f2016b4b652b055ee7272e75727206fb4c8d4031a933ec51333a65c51f87130e"
+      },
+      {
+        "file": "TurnFaucet-v0-frame-15.png",
+        "width": 256,
+        "height": 256,
+        "label": "拨动把手",
+        "alt": "Panda 机械臂拨动水龙头把手，改变其关节角度。",
+        "source_url": "https://raw.githubusercontent.com/mani-skill/ManiSkill/62ff3a5896b4d5b4cf0ac4c8d79afe600c9404a3/docs/source/user_guide/concepts/thumbnails/TurnFaucet-v0.gif",
+        "frame_index": 15,
+        "sha256": "c878667f96a4e04a073b6eff0a237bdabf1b6a00bceafec24b51f6b6677d0412"
+      }
+    ]
+  },
+  "so101_typing": {
+    "caption": "SO101 用爪尖按键，随后释放并移动到下一个目标键。",
+    "context": "官方视觉策略仿真演示帧，右上角为腕部相机视角。P0 与公开视觉教程共享此场景配图，配置与验收仍分别介绍。",
+    "credit": "NVIDIA / SO101 typing task contributors",
+    "relationship": "official-project-demonstration-shared-between-variants",
+    "sources": [
+      [
+        "官方演示与说明",
+        "https://github.com/NVIDIA/so101-typing-task/tree/7aec2ed26dce8c88ae007a2714680cce572e1466"
+      ],
+      [
+        "原始仿真 GIF",
+        "https://raw.githubusercontent.com/NVIDIA/so101-typing-task/7aec2ed26dce8c88ae007a2714680cce572e1466/docs/media/isaac-lab-3p0-single-env.gif"
+      ]
+    ],
+    "license": "See NVIDIA project LICENSE and THIRD_PARTY_NOTICES",
+    "images": [
+      {
+        "file": "so101-typing-simulation.png",
+        "width": 720,
+        "height": 405,
+        "label": "官方仿真 + 腕部相机",
+        "alt": "黄色 SO101 机械臂在仿真桌面上用爪尖按键，右上角显示腕部相机图像。",
+        "source_url": "https://raw.githubusercontent.com/NVIDIA/so101-typing-task/7aec2ed26dce8c88ae007a2714680cce572e1466/docs/media/isaac-lab-3p0-single-env.gif",
+        "frame_index": 89,
+        "sha256": "a59199d1778e41180219c84859e6aeeeec9c865878ffa2b23e93c131429e5825"
+      }
+    ]
+  },
+  "isaaclab_lift": {
+    "caption": "Franka 抓起桌面方块，并将其搬向目标位置。",
+    "context": "Lab 官方环境目录的 Lift 场景截图。",
+    "credit": "The Isaac Lab Project Developers",
+    "relationship": "official-task-scene",
+    "sources": [
+      [
+        "来源说明",
+        "https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/overview/environments.rst"
+      ],
+      [
+        "原始画面",
+        "https://raw.githubusercontent.com/isaac-sim/IsaacLab/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/_static/tasks/manipulation/franka_lift.jpg"
+      ]
+    ],
+    "license": "BSD-3-Clause",
+    "license_url": "https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/LICENSE",
+    "images": [
+      {
+        "file": "isaac-franka_lift.jpg",
+        "width": 1440,
+        "height": 900,
+        "alt": "Franka 抓起桌面方块，并将其搬向目标位置。",
+        "label": "仿真任务场景",
+        "source_url": "https://raw.githubusercontent.com/isaac-sim/IsaacLab/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/_static/tasks/manipulation/franka_lift.jpg",
+        "sha256": "6d0d93ba33e8e851a6139ad82cb6970b39236f75d1bf1c471aad16323e4a2909"
+      }
+    ]
+  },
+  "isaaclab_cabinet": {
+    "caption": "Franka 夹住抽屉把手并向外拉开抽屉。",
+    "context": "Lab 官方环境目录中 manager 与 Direct 共用的抽屉任务场景示例。",
+    "credit": "The Isaac Lab Project Developers",
+    "relationship": "official-task-scene",
+    "sources": [
+      [
+        "来源说明",
+        "https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/overview/environments.rst"
+      ],
+      [
+        "原始画面",
+        "https://raw.githubusercontent.com/isaac-sim/IsaacLab/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/_static/tasks/manipulation/franka_open_drawer.jpg"
+      ]
+    ],
+    "license": "BSD-3-Clause",
+    "license_url": "https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/LICENSE",
+    "images": [
+      {
+        "file": "isaac-franka_open_drawer.jpg",
+        "width": 1322,
+        "height": 828,
+        "alt": "Franka 夹住抽屉把手并向外拉开抽屉。",
+        "label": "仿真任务场景",
+        "source_url": "https://raw.githubusercontent.com/isaac-sim/IsaacLab/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/_static/tasks/manipulation/franka_open_drawer.jpg",
+        "sha256": "23e49861bd120df01f2b3496e522850c1456697e9ba678b4cc6b373ef5c25a56"
+      }
+    ]
+  },
+  "isaaclab_factory": {
+    "caption": "夹爪已抓住黄色销，向下对齐并插入灰色孔座。",
+    "context": "Factory PegInsert 官方截图；局部技能从已抓住销的状态开始。",
+    "credit": "The Isaac Lab Project Developers",
+    "relationship": "official-task-scene",
+    "sources": [
+      [
+        "来源说明",
+        "https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/overview/environments.rst"
+      ],
+      [
+        "原始画面",
+        "https://raw.githubusercontent.com/isaac-sim/IsaacLab/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/_static/tasks/factory/peg_insert.jpg"
+      ]
+    ],
+    "license": "BSD-3-Clause",
+    "license_url": "https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/LICENSE",
+    "images": [
+      {
+        "file": "isaac-peg_insert.jpg",
+        "width": 525,
+        "height": 420,
+        "alt": "夹爪已抓住黄色销，向下对齐并插入灰色孔座。",
+        "label": "仿真任务场景",
+        "source_url": "https://raw.githubusercontent.com/isaac-sim/IsaacLab/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/_static/tasks/factory/peg_insert.jpg",
+        "sha256": "9376e7c43b9417063380d4252fa4de5cb492e22f70c6d99aea50aa081dc1f228"
+      }
+    ]
+  },
+  "isaaclab_stack_negative": {
+    "caption": "Franka 将桌面的蓝、红、绿三个方块按顺序叠起来。",
+    "context": "Lab Stack 官方场景；图示任务存在不代表该版本提供 PPO 基线。",
+    "credit": "The Isaac Lab Project Developers",
+    "relationship": "official-task-scene",
+    "sources": [
+      [
+        "来源说明",
+        "https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/overview/environments.rst"
+      ],
+      [
+        "原始画面",
+        "https://raw.githubusercontent.com/isaac-sim/IsaacLab/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/_static/tasks/manipulation/franka_stack.jpg"
+      ]
+    ],
+    "license": "BSD-3-Clause",
+    "license_url": "https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/LICENSE",
+    "images": [
+      {
+        "file": "isaac-franka_stack.jpg",
+        "width": 1314,
+        "height": 760,
+        "alt": "Franka 将桌面的蓝、红、绿三个方块按顺序叠起来。",
+        "label": "仿真任务场景",
+        "source_url": "https://raw.githubusercontent.com/isaac-sim/IsaacLab/3c6e67bb5c7ada942a6d1884ab69338f57596f77/docs/source/_static/tasks/manipulation/franka_stack.jpg",
+        "sha256": "a22a0cf57db9af77cffe320e545263818899dcbec35f6563ca36c25556fff23a"
+      }
+    ]
+  },
+  "isaacgym_stack": {
+    "caption": "Franka 抓起红色小方块，并把它叠到绿色方块上；两幅图展示不同抓取方向。",
+    "context": "IIFL 论文 Figure 7 中的 FrankaCubeStack 场景，展示同名任务；不是本手册固定 SHA 的策略回放或 PPO 成绩。",
+    "credit": "Gaurav Datta, Ryan Hoque, Anrui Gu, Eugen Solowjow, Ken Goldberg, IIFL, CoRL 2023, Figure 7",
+    "relationship": "published-research-same-task",
+    "sources": [
+      [
+        "来源说明",
+        "https://arxiv.org/html/2306.15228v2#S7.F7"
+      ],
+      [
+        "原始画面",
+        "https://arxiv.org/html/2306.15228v2/franka_cube_stack.svg"
+      ]
+    ],
+    "license": "CC-BY-4.0, PMLR publication agreement",
+    "license_url": "https://proceedings.mlr.press/pmlr-license-agreement.html",
+    "images": [
+      {
+        "file": "isaac-iifl_cube_panel_12.png",
+        "width": 2048,
+        "height": 848,
+        "alt": "Isaac Gym FrankaCubeStack 仿真中，Franka 在白色桌面上以两种夹爪方向抓取红方块，旁边为绿色目标方块。",
+        "label": "研究论文场景示例",
+        "source_url": "https://arxiv.org/html/2306.15228v2/franka_cube_stack.svg",
+        "sha256": "37d15e321ca52e9443ab0cdb0f5efefa5483d49216def47aeef765f55f610c86"
+      }
+    ]
+  },
+  "playground__PandaPickCubeCartesian": {
+    "caption": "Panda 从地面附近抓起红色方块，并将其抬向目标位置。",
+    "context": "固定版本 XML 的本地仿真渲染，分别采用官方 low_home 与 picked 预设位姿；两图为静态场景，不表示一次完整动作轨迹。",
+    "credit": "Google DeepMind MuJoCo Playground; Franka assets from MuJoCo Menagerie",
+    "relationship": "local_scene_render",
+    "sources": [
+      [
+        "任务 / 演示来源",
+        "https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/_src/manipulation/franka_emika_panda/pick_cartesian.py"
+      ],
+      [
+        "场景 / 原图",
+        "https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/_src/manipulation/franka_emika_panda/xmls/mjx_single_cube_camera.xml"
+      ]
+    ],
+    "license": "Playground Apache-2.0; Franka Panda Menagerie LICENSE at pinned revision is Apache-2.0 (asset-specific README notices may also apply)",
+    "license_url": "https://github.com/google-deepmind/mujoco_menagerie/blob/1b86ece576591213e2b666ebf59508454200ca97/franka_emika_panda/LICENSE",
+    "images": [
+      {
+        "file": "playground_pick_start.png",
+        "width": 900,
+        "height": 600,
+        "alt": "Panda 从地面附近抓起红色方块，并将其抬向目标位置。",
+        "label": "官方场景 low_home 预设位姿",
+        "source_url": "https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/_src/manipulation/franka_emika_panda/xmls/mjx_single_cube_camera.xml",
+        "sha256": "1a2466e1dbc6ef46ff4b33a34e61d124efa47e86d804051638162cbe26f7fe08"
+      },
+      {
+        "file": "playground_pick_guide.png",
+        "width": 900,
+        "height": 600,
+        "alt": "Panda 从地面附近抓起红色方块，并将其抬向目标位置。",
+        "label": "官方场景 picked 引导位姿",
+        "source_url": "https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/_src/manipulation/franka_emika_panda/xmls/mjx_single_cube_camera.xml",
+        "sha256": "805b6a9a66fbde70530127b7c0e6e9103a7798f4959edc64f15dd83e75dfe4f8"
+      }
+    ]
+  },
+  "playground__PandaOpenCabinet": {
+    "caption": "夹爪需要抓住绿色滑动把手，沿滑轨拉向红色目标；此任务用简化几何表示抽屉。",
+    "context": "固定版本 XML 的本地静态渲染；绿色几何是该任务实际使用的简化滑动把手，不是完整柜体。",
+    "credit": "Google DeepMind MuJoCo Playground; Franka assets from MuJoCo Menagerie",
+    "relationship": "local_scene_render",
+    "sources": [
+      [
+        "任务 / 演示来源",
+        "https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/_src/manipulation/franka_emika_panda/open_cabinet.py"
+      ],
+      [
+        "场景 / 原图",
+        "https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/_src/manipulation/franka_emika_panda/xmls/mjx_cabinet.xml"
+      ]
+    ],
+    "license": "Playground Apache-2.0; Franka Panda Menagerie LICENSE at pinned revision is Apache-2.0 (asset-specific README notices may also apply)",
+    "license_url": "https://github.com/google-deepmind/mujoco_menagerie/blob/1b86ece576591213e2b666ebf59508454200ca97/franka_emika_panda/LICENSE",
+    "images": [
+      {
+        "file": "playground_cabinet.png",
+        "width": 900,
+        "height": 600,
+        "alt": "夹爪需要抓住绿色滑动把手，沿滑轨拉向红色目标；此任务用简化几何表示抽屉。",
+        "label": "简化把手与滑轨场景",
+        "source_url": "https://github.com/google-deepmind/mujoco_playground/blob/56420458c8d81acd6942779d9dab327382117175/rss2025/mujoco_playground/_src/manipulation/franka_emika_panda/xmls/mjx_cabinet.xml",
+        "sha256": "3cbec3158ef7f55c2547f8fba6f3da90b310b9c3adc672612409327c9c7d4bdc"
+      }
+    ]
+  },
+  "metaworld__button-press-v3": {
+    "caption": "Sawyer 夹爪接近黄色装置上的侧向按钮，并向前按压。",
+    "context": "固定版本场景，官方脚本策略经 env.step 执行，seed 42；展示接近前与按压后的帧，不是 PPO 训练结果。",
+    "credit": "Farama Foundation Meta-World; local MuJoCo scripted rendering",
+    "relationship": "local_scripted_rollout",
+    "sources": [
+      [
+        "任务 / 演示来源",
+        "https://github.com/Farama-Foundation/Metaworld/blob/a14b096edb015ca931e33643a19ea97f4d92eb0f/metaworld/policies/sawyer_button_press_v3_policy.py"
+      ],
+      [
+        "场景 / 原图",
+        "https://github.com/Farama-Foundation/Metaworld/blob/a14b096edb015ca931e33643a19ea97f4d92eb0f/metaworld/envs/sawyer_button_press_v3.py"
+      ]
+    ],
+    "license": "Meta-World MIT, asset notices retain their own terms",
+    "license_url": "https://github.com/Farama-Foundation/Metaworld/blob/a14b096edb015ca931e33643a19ea97f4d92eb0f/LICENSE",
+    "images": [
+      {
+        "file": "metaworld_button_start.png",
+        "width": 720,
+        "height": 540,
+        "alt": "Sawyer 夹爪接近黄色装置上的侧向按钮，并向前按压。",
+        "label": "接近前",
+        "source_url": "https://github.com/Farama-Foundation/Metaworld/blob/a14b096edb015ca931e33643a19ea97f4d92eb0f/metaworld/envs/sawyer_button_press_v3.py",
+        "sha256": "cf2bd149998938aca42444cc0c8a58a2e3450c0247871c71150f05c14da62af8"
+      },
+      {
+        "file": "metaworld_button_140.png",
+        "width": 720,
+        "height": 540,
+        "alt": "Sawyer 夹爪接近黄色装置上的侧向按钮，并向前按压。",
+        "label": "脚本动作后的按压画面",
+        "source_url": "https://github.com/Farama-Foundation/Metaworld/blob/a14b096edb015ca931e33643a19ea97f4d92eb0f/metaworld/envs/sawyer_button_press_v3.py",
+        "sha256": "c44b1c97d213af6205718865f1a7e6b12bb6d208349819f3859096dbdf30dbd2"
+      }
+    ]
+  },
+  "robosuite__Stack": {
+    "caption": "夹爪抓起红色方块，将它叠放到绿色方块上。",
+    "context": "官方 Stack 文档示例的后两格，展示抓取和叠放；文档配图用于辨认任务，不代表本手册配置的训练结果。",
+    "credit": "ARISE Initiative robosuite",
+    "relationship": "official_simulation_image",
+    "sources": [
+      [
+        "任务 / 演示来源",
+        "https://robosuite.ai/docs/modules/environments.html#stacking"
+      ],
+      [
+        "场景 / 原图",
+        "https://robosuite.ai/docs/_images/env_stack.png"
+      ]
+    ],
+    "license": "Repository MIT; documentation image has no separate license declaration located",
+    "license_url": "https://github.com/ARISE-Initiative/robosuite/blob/5ce6643f3092639d08f7b0f90ed1c6a84f50552c/LICENSE",
+    "images": [
+      {
+        "file": "robosuite_stack_steps.png",
+        "width": 1024,
+        "height": 512,
+        "alt": "夹爪抓起红色方块，将它叠放到绿色方块上。",
+        "label": "官方堆叠任务示例",
+        "source_url": "https://robosuite.ai/docs/_images/env_stack.png",
+        "sha256": "534d5ef39bc44452b9c43743cf2759335f69d11e6250c742c11fdea562d9617d"
+      }
+    ]
+  },
+  "bidexhands__ShadowHandOver": {
+    "caption": "两只灵巧手协作，将物体从一侧传向另一侧目标。",
+    "context": "官方同名任务仿真演示。图中的物体实例未确定为正文配置的 egg 变体；具体验收仍以正文为准。",
+    "credit": "PKU-MARL Bi-DexHands",
+    "relationship": "official_simulation_gif_frame",
+    "sources": [
+      [
+        "任务 / 演示来源",
+        "https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/README.md#tasks"
+      ],
+      [
+        "场景 / 原图",
+        "https://raw.githubusercontent.com/PKU-MARL/DexterousHands/dc41afd134cebfe4d80a5b861f0b8c15d734320a/assets/image_folder/0v2.gif"
+      ]
+    ],
+    "license": "Repository Apache-2.0 at pinned revision; no separate demo-media license declaration located",
+    "license_url": "https://github.com/PKU-MARL/DexterousHands/blob/dc41afd134cebfe4d80a5b861f0b8c15d734320a/LICENSE",
+    "images": [
+      {
+        "file": "bidex_shadowhandover.gif",
+        "width": 319,
+        "height": 162,
+        "alt": "两只灵巧手协作，将物体从一侧传向另一侧目标。",
+        "label": "官方仿真演示（动图）",
+        "source_url": "https://raw.githubusercontent.com/PKU-MARL/DexterousHands/dc41afd134cebfe4d80a5b861f0b8c15d734320a/assets/image_folder/0v2.gif",
+        "sha256": "d1d2337ea0c2deef486d1309c4ee24bc517cb662bdf3f59653d80b859adafb60"
+      }
+    ]
+  }
+}

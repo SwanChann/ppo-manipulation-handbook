@@ -9,6 +9,8 @@
 
 首页提供任务搜索、阶段示意、配置详情和采样轮数计算器。完整 HTML 附录保留公式和固定版本的源码链接。网页没有外部字体、CDN 或分析脚本。
 
+全部任务导览卡和详细任务卡包含仿真示例图、动作说明及来源，可离线阅读和点击查看大图。官方演示、旧版代表场景、本地静态渲染和脚本动作画面分别标注；配图不作为 PPO 训练结果。图片来源与许可见 [配图清单](content/task_media.json) 和 [网页图源说明](site/media-sources.html)。
+
 ## 构建
 
 `content/survey/` 保存公开的调查 Markdown 与 JSONL，`content/start.html` 保存阅读首页。`scripts/build.py` 生成 `site/`，构建只需要 Python 与 `requirements.txt` 中的依赖。

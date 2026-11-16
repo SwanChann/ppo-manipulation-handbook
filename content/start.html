@@ -30,7 +30,7 @@
 </section>
 <section id="tasks">
   <div class="section-heading"><span class="section-number">03</span><div><p class="eyebrow">源码任务索引</p><h2>先选任务，再读实现</h2></div></div>
-  <p>用任务类型筛选；每张卡给出值得借鉴的机制和上游验收边界。完整卡保留奖励公式、观测、动作与配置。<span class="muted">“源码已核验”不表示策略已复现成功。</span></p>
+  <p>先看仿真画面辨认任务，再用类型筛选。每张卡给出动作说明、值得借鉴的机制和验收边界；点击图片可查看大图，进入完整卡可继续阅读公式、观测和配置。<span class="muted">画面来源与场景版本见图注；“源码已核验”不表示策略已复现成功。</span></p>
   <div class="filters"><label class="search-label"><span>搜索任务或项目</span><input type="search" id="task-search" placeholder="例如：按键、Stack、插入、ManiSkill" autocomplete="off"></label><label><span>任务类型</span><select id="task-family"><option value="all">全部任务</option><option value="press-switch">按钮 / 按键</option><option value="grasp-place">抓取 / 堆叠</option><option value="insertion-assembly">插入 / 装配</option><option value="articulated">抽屉 / 关节物体</option><option value="bimanual">双臂 / 双手</option><option value="mobile-manipulation">移动操作</option></select></label></div>
   <p id="task-count" class="caption" aria-live="polite"></p><div class="cards task-grid" id="task-grid">{{TASK_CARDS}}</div><p id="task-empty" hidden>没有匹配的任务。试试更短的关键词或选择全部类型。</p>
 </section>

@@ -93,5 +93,11 @@
     $('#calc-envs').value = '64'; calculate(); check('parallel arithmetic', $('#calc-output').textContent.includes('244 个')); $('#calc-envs').value = '8'; calculate();
     $('#calc-envs').value = '0'; calculate(); check('invalid budget input', $('#calc-output').textContent === '请输入三个正整数。'); $('#calc-envs').value = '8'; calculate();
     const r = document.createElement('script'); r.type = 'application/json'; r.id = 'verification-results'; r.textContent = JSON.stringify(results); document.body.append(r);
+    const images = $$('img'); images.forEach(img => { img.loading = 'eager'; });
+    Promise.all(images.map(img => img.decode().then(() => true).catch(() => false))).then(loaded => {
+      check('all task images decode offline', images.length > 0 && loaded.every(Boolean));
+      check('every guide card has an image', $$('.task-card').every(card => card.querySelector('figure img')));
+      r.textContent = JSON.stringify(results);
+    });
   }
 })();
