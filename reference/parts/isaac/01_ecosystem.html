@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>项目与版本 · 操作 PPO 手册</title><link rel="icon" href="../../../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../../../assets/style.css"><script src="../../../assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="../../../index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="../../../index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="../../../index.html#stages"><b>02</b>阶段策略示意</a><a href="../../../index.html#tasks"><b>03</b>源码任务索引</a><a href="../../../index.html#rewards"><b>04</b>奖励设计机制</a><a href="../../../index.html#configs"><b>05</b>训练配置对照</a><a href="../../../index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="../../../reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="../../../index.html">操作 PPO 源码手册</a><a href="../../../index.html#reading">目录 ↓</a></header><main id="main" class="main article-shell"><div class="article-header"><a href="../../../index.html#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div><article class="prose"><h1>项目与版本</h1>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>项目</th>
+<th>固定修订</th>
+<th>定位</th>
+<th>维护/使用边界</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Isaac Lab</td>
+<td>3c6e67bb5c7ada942a6d1884ab69338f57596f77 (v2.3.0)</td>
+<td>环境套件+多训练器接入</td>
+<td>选择稳定发布做对照，不宣称最新main</td>
+</tr>
+<tr>
+<td>IsaacGymEnvs</td>
+<td>aeed298638a1f7b5421b38f5f3cc2d1079b6d9c3</td>
+<td>历史GPU RL任务</td>
+<td>2026-11-16 API archived=true；保留设计，不作为新部署栈</td>
+</tr>
+<tr>
+<td>NVIDIA/so101-typing-task</td>
+<td>7aec2ed26dce8c88ae007a2714680cce572e1466</td>
+<td>专项键盘任务</td>
+<td>Newton MJWarp、独立Docker/runtime祖先，不能套Lab2.3的依赖</td>
+</tr>
+</tbody>
+</table></div>
+<p>本机快照和SHA256见<code>source_manifest.json</code>；repo metadata在records/rl/ppo_survey_sources_20261116/isaac。Lab当次8657 stars，GymEnvs2949；只作影响力佐证，不据stars断言某个任务PPO成功。SO101未建立stars记录。检查的源码均BSD-3-Clause，外部USD、机器人资产许可需独立按来源处理。</p>
+<p>角色区分：RSL-RL/RL-Games是trainer，任务reward由环境定义。Cabinet注册三个trainer只证明集成存在，不代表三种同预算基线等价。<a href="https://github.com/isaac-sim/IsaacLab/blob/3c6e67bb5c7ada942a6d1884ab69338f57596f77/source/isaaclab_tasks/isaaclab_tasks/direct/franka_cabinet/__init__.py#L17-L27">源码</a> SO101运行时依赖明确固定另一IsaacLab fork祖先及patch，不与此分册Lab2.3代码混用。<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/docker/typing-public.Dockerfile#L4-L18">源码</a></p>
+</article><footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>

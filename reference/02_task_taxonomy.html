@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>按任务选择需要复用的环节 · 操作 PPO 手册</title><link rel="icon" href="../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../assets/style.css"><script src="../assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="../index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="../index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="../index.html#stages"><b>02</b>阶段策略示意</a><a href="../index.html#tasks"><b>03</b>源码任务索引</a><a href="../index.html#rewards"><b>04</b>奖励设计机制</a><a href="../index.html#configs"><b>05</b>训练配置对照</a><a href="../index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="../reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="../index.html">操作 PPO 源码手册</a><a href="../index.html#reading">目录 ↓</a></header><main id="main" class="main article-shell"><div class="article-header"><a href="../index.html#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div><article class="prose"><h1>按任务选择需要复用的环节</h1><nav class="article-toc" aria-label="本页目录"><ul><li><a href="#section-1">完整任务卡索引</a></li></ul></nav>
+<p>接近/抓取、精密接触、释放与恢复属于不同学习问题。以下条目由注册、实现和配置证据建立；没有把一个任务套件的总任务数写成本次全部检查数量。负例也保留，便于识别“有环境但无密集PPO配置”的情况。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>任务</th>
+<th>类别</th>
+<th>核验状态</th>
+<th>配置记录数</th>
+<th>证据入口</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PickCube-v1</td>
+<td>grasp-place</td>
+<td>verified</td>
+<td>3</td>
+<td><a href="parts/maniskill/task_cards/PickCube-v1.html">任务卡</a></td>
+</tr>
+<tr>
+<td>StackCube-v1</td>
+<td>grasp-place</td>
+<td>verified</td>
+<td>2</td>
+<td><a href="parts/maniskill/task_cards/StackCube-v1.html">任务卡</a></td>
+</tr>
+<tr>
+<td>PegInsertionSide-v1</td>
+<td>insertion-assembly</td>
+<td>verified</td>
+<td>2</td>
+<td><a href="parts/maniskill/task_cards/PegInsertionSide-v1.html">任务卡</a></td>
+</tr>
+<tr>
+<td>TwoRobotStackCube-v1</td>
+<td>bimanual</td>
+<td>verified</td>
+<td>1</td>
+<td><a href="parts/maniskill/task_cards/TwoRobotStackCube-v1.html">任务卡</a></td>
+</tr>
+<tr>
+<td>OpenCabinetDrawer-v1</td>
+<td>mobile-manipulation</td>
+<td>verified</td>
+<td>2</td>
+<td><a href="parts/maniskill/task_cards/OpenCabinetDrawer-v1.html">任务卡</a></td>
+</tr>
+<tr>
+<td>TurnFaucet-v1</td>
+<td>articulated</td>
+<td>verified</td>
+<td>0</td>
+<td><a href="parts/maniskill/task_cards/TurnFaucet-v1.html">任务卡</a></td>
+</tr>
+<tr>
+<td>AssemblingKits-v1</td>
+<td>insertion-assembly</td>
+<td>verified</td>
+<td>0</td>
+<td><a href="parts/maniskill/task_cards/AssemblingKits-v1.html">任务卡</a></td>
+</tr>
+<tr>
+<td>Isaac-Lift-Cube-Franka-v0</td>
+<td>grasp-place</td>
+<td>verified</td>
+<td>1</td>
+<td><a href="parts/isaac/task_cards/isaaclab_lift.html">任务卡</a></td>
+</tr>
+<tr>
+<td>Isaac-Franka-Cabinet-Direct-v0</td>
+<td>articulated</td>
+<td>verified</td>
+<td>1</td>
+<td><a href="parts/isaac/task_cards/isaaclab_cabinet.html">任务卡</a></td>
+</tr>
+<tr>
+<td>Isaac-Factory-PegInsert-Direct-v0</td>
+<td>insertion-assembly</td>
+<td>verified</td>
+<td>1</td>
+<td><a href="parts/isaac/task_cards/isaaclab_factory.html">任务卡</a></td>
+</tr>
+<tr>
+<td>FrankaCubeStack</td>
+<td>grasp-place</td>
+<td>verified</td>
+<td>1</td>
+<td><a href="parts/isaac/task_cards/isaacgym_stack.html">任务卡</a></td>
+</tr>
+<tr>
+<td>Isaac-Keyboard-SO101-MX-Physical-Calibrated-20260718-FixedCartesian-AnchorBench-P0</td>
+<td>press-switch</td>
+<td>verified</td>
+<td>1</td>
+<td><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/mdp/rewards.py#L137-L271">源码</a>、<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/fixed_cartesian_env_cfg.py#L35-L234">源码</a></td>
+</tr>
+<tr>
+<td>VisionIsaacLabPhraseEnvCfg / public tutorial random13 characters</td>
+<td>press-switch</td>
+<td>verified</td>
+<td>2</td>
+<td><a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/mdp/rewards.py#L137-L271">源码</a>、<a href="https://github.com/NVIDIA/so101-typing-task/blob/7aec2ed26dce8c88ae007a2714680cce572e1466/source/so101_typing/tasks/fixed_cartesian_env_cfg.py#L35-L234">源码</a></td>
+</tr>
+<tr>
+<td>Isaac-Stack-Cube-Franka-v0 (negative PPO baseline example)</td>
+<td>grasp-place</td>
+<td>partial</td>
+<td>0</td>
+<td><a href="parts/isaac/task_cards/isaaclab_stack_negative.html">任务卡</a></td>
+</tr>
+<tr>
+<td>PandaPickCubeCartesian (RSS2025)</td>
+<td>grasp-place</td>
+<td>partial</td>
+<td>2</td>
+<td><a href="parts/breadth/task_cards/playground__PandaPickCubeCartesian.html">任务卡</a></td>
+</tr>
+<tr>
+<td>PandaOpenCabinet (RSS2025)</td>
+<td>articulated</td>
+<td>partial</td>
+<td>1</td>
+<td><a href="parts/breadth/task_cards/playground__PandaOpenCabinet.html">任务卡</a></td>
+</tr>
+<tr>
+<td>button-press-v3 / reward v2</td>
+<td>press-switch</td>
+<td>partial</td>
+<td>0</td>
+<td><a href="parts/breadth/task_cards/metaworld__button-press-v3.html">任务卡</a></td>
+</tr>
+<tr>
+<td>Stack, reward_shaping=True explicit variant</td>
+<td>grasp-place</td>
+<td>partial</td>
+<td>0</td>
+<td><a href="parts/breadth/task_cards/robosuite__Stack.html">任务卡</a></td>
+</tr>
+<tr>
+<td>ShadowHandOver / single-agent PPO / egg full_state</td>
+<td>bimanual</td>
+<td>verified</td>
+<td>1</td>
+<td><a href="parts/breadth/task_cards/bidexhands__ShadowHandOver.html">任务卡</a></td>
+</tr>
+</tbody>
+</table></div>
+<p>阅读任务卡时先看成功和episode终止，再看奖励和预算。机器人与动作维度不能只看数字：Playground三维动作含夹爪，X5三维是TCP xyz；SO101五维是关节速度比例。各卡明确控制频率、物理频率和观测，缺失字段保留未知。</p>
+<h2 id="section-1">完整任务卡索引</h2>
+<ul>
+<li><a href="parts/maniskill/task_cards/PegInsertionSide-v1.html">PegInsertionSide-v1</a></li>
+<li><a href="parts/maniskill/task_cards/PickCube-v1.html">PickCube-v1</a></li>
+<li><a href="parts/maniskill/task_cards/AssemblingKits-v1.html">AssemblingKits-v1</a></li>
+<li><a href="parts/maniskill/task_cards/OpenCabinetDrawer-v1.html">OpenCabinetDrawer-v1</a></li>
+<li><a href="parts/maniskill/task_cards/TurnFaucet-v1.html">TurnFaucet-v1</a></li>
+<li><a href="parts/maniskill/task_cards/TwoRobotStackCube-v1.html">TwoRobotStackCube-v1</a></li>
+<li><a href="parts/maniskill/task_cards/StackCube-v1.html">StackCube-v1</a></li>
+<li><a href="parts/isaac/task_cards/isaaclab_lift.html">isaaclab_lift</a></li>
+<li><a href="parts/isaac/task_cards/isaacgym_stack.html">isaacgym_stack</a></li>
+<li><a href="parts/isaac/task_cards/isaaclab_stack_negative.html">isaaclab_stack_negative</a></li>
+<li><a href="parts/isaac/task_cards/isaaclab_factory.html">isaaclab_factory</a></li>
+<li><a href="parts/isaac/task_cards/so101_typing.html">so101_typing</a></li>
+<li><a href="parts/isaac/task_cards/isaaclab_cabinet.html">isaaclab_cabinet</a></li>
+<li><a href="parts/breadth/task_cards/playground__PandaOpenCabinet.html">playground__PandaOpenCabinet</a></li>
+<li><a href="parts/breadth/task_cards/robosuite__Stack.html">robosuite__Stack</a></li>
+<li><a href="parts/breadth/task_cards/playground__PandaPickCubeCartesian.html">playground__PandaPickCubeCartesian</a></li>
+<li><a href="parts/breadth/task_cards/metaworld__button-press-v3.html">metaworld__button-press-v3</a></li>
+<li><a href="parts/breadth/task_cards/bidexhands__ShadowHandOver.html">bidexhands__ShadowHandOver</a></li>
+</ul>
+</article><footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>

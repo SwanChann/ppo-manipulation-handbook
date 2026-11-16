@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="description" content="机械臂操作 PPO 源码手册：任务、奖励、阶段事件与训练配置。"><title>已核查任务卡 · 操作 PPO 手册</title><link rel="icon" href="../../../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../../../assets/style.css"><script src="../../../assets/app.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><aside class="sidebar"><a class="brand" href="../../../index.html">操作 PPO<br>源码手册<small>MANIPULATION FIELD GUIDE</small></a><nav aria-label="主导航"><a href="../../../index.html#takeaways"><b>01</b>结论与阅读路线</a><a href="../../../index.html#stages"><b>02</b>阶段策略示意</a><a href="../../../index.html#tasks"><b>03</b>源码任务索引</a><a href="../../../index.html#rewards"><b>04</b>奖励设计机制</a><a href="../../../index.html#configs"><b>05</b>训练配置对照</a><a href="../../../index.html#reading"><b>06</b>完整技术附录</a></nav><div class="side-footer">源码调查 · 2026-11-16<br>ManiSkill / Isaac / MuJoCo<a href="https://github.com/SwanChann/ppo-manipulation-handbook">GitHub 公开仓库 ↗</a><a href="../../../reference/06_gaps.html">证据范围与未知值</a></div></aside>
+<header class="mobile-header"><a href="../../../index.html">操作 PPO 源码手册</a><a href="../../../index.html#reading">目录 ↓</a></header><main id="main" class="main article-shell"><div class="article-header"><a href="../../../index.html#reading">← 返回阅读目录</a><span>完整技术附录 · 源码调查快照</span></div><article class="prose"><h1>已核查任务卡</h1>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>任务</th>
+<th>任务物理目标</th>
+<th>Actor的阶段输入</th>
+<th>完成边界</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lab Lift</td>
+<td>抬物到命令目标</td>
+<td>无one-hot</td>
+<td>无单独完整成功，掉落或超时</td>
+</tr>
+<tr>
+<td>Lab Cabinet</td>
+<td>拉开抽屉</td>
+<td>无one-hot</td>
+<td>关节开度&gt;.39m即终止</td>
+</tr>
+<tr>
+<td>Factory PegInsert</td>
+<td>预抓住销插孔</td>
+<td>无one-hot，LSTM</td>
+<td>几何阈值；不释放、不回家</td>
+</tr>
+<tr>
+<td>GymEnvs CubeStack</td>
+<td>抓取、抬起、叠放</td>
+<td>无one-hot</td>
+<td>高度/水平误差+手离开几何代理</td>
+</tr>
+<tr>
+<td>SO101 P0</td>
+<td>单键按下、释放、离键</td>
+<td>三维one-hot给双方</td>
+<td>4mm净空2tick，不返回初态</td>
+</tr>
+<tr>
+<td>SO101 tutorial</td>
+<td>13字符随机串</td>
+<td>state teacher双方；vision actor本体/RGB/phase，criticstate</td>
+<td>15mm净空；完整字符串</td>
+</tr>
+<tr>
+<td>Lab Stack负例</td>
+<td>三块堆叠</td>
+<td>不作为PPO调查结论</td>
+<td>rewards=None，注册无PPO配置</td>
+</tr>
+</tbody>
+</table></div>
+<p>详见<a href="task_cards/isaaclab_lift.html">isaaclab_lift.md</a>、<a href="task_cards/isaaclab_cabinet.html">isaaclab_cabinet.md</a>、<a href="task_cards/isaaclab_factory.html">isaaclab_factory.md</a>、<a href="task_cards/isaacgym_stack.html">isaacgym_stack.md</a>、<a href="task_cards/so101_typing.html">so101_typing.md</a>、<a href="task_cards/isaaclab_stack_negative.html">isaaclab_stack_negative.md</a>。任务成功定义不同，不能直接横比上游成功率，更不能将“开启即终止”当作完成我们的撤回停稳任务。</p>
+</article><footer class="footer"><span>基于固定源码版本的技术调查 · 未执行上游训练</span><a href="https://github.com/SwanChann/ppo-manipulation-handbook">SwanChann / ppo-manipulation-handbook ↗</a></footer></main><a class="back-top" href="#main" aria-label="返回顶部">↑</a></body></html>
